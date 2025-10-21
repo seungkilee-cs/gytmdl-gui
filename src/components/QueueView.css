@@ -1,0 +1,244 @@
+.queue-view {
+  padding: 2rem;
+  max-width: 100%;
+}
+
+/* Header Section */
+.queue-header {
+  margin-bottom: 2rem;
+}
+
+.queue-header h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+/* Queue Statistics */
+.queue-stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  min-width: 80px;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* URL Input Section */
+.url-input-section {
+  margin-bottom: 2rem;
+}
+
+.url-form {
+  margin-bottom: 1rem;
+}
+
+.url-input-container {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+}
+
+.url-input-container.drag-over {
+  border-color: var(--primary-color);
+  background-color: rgba(100, 108, 255, 0.05);
+}
+
+.url-input {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.add-button {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.add-button:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.add-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Error Message */
+.error-message {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: var(--border-radius);
+  color: #c33;
+}
+
+.error-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #c33;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Queue Controls */
+.queue-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.control-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-sort-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-select,
+.sort-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.875rem;
+}
+
+/* Job List */
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+.empty-state p {
+  margin: 0.5rem 0;
+}
+
+.empty-subtitle {
+  font-size: 0.875rem;
+}
+
+
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .queue-view {
+    padding: 1rem;
+  }
+  
+  .queue-stats {
+    justify-content: center;
+  }
+  
+  .stat-item {
+    min-width: 70px;
+    padding: 0.75rem;
+  }
+  
+  .url-input-container {
+    flex-direction: column;
+  }
+  
+  .queue-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group,
+  .filter-sort-controls {
+    justify-content: center;
+  }
+  
+
+}
+
+@media (max-width: 480px) {
+  .queue-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .input-actions {
+    flex-direction: column;
+  }
+  
+  .control-group {
+    flex-direction: column;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .error-message {
+    background-color: #2d1b1b;
+    border-color: #5a2d2d;
+    color: #ff6b6b;
+  }
+  
+  .error-close {
+    color: #ff6b6b;
+  }
+  
+
+}

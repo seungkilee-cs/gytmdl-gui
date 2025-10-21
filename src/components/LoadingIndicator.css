@@ -1,0 +1,173 @@
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.loading-spinner {
+  display: inline-block;
+  position: relative;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+}
+
+.loading-spinner-medium {
+  width: 32px;
+  height: 32px;
+}
+
+.loading-spinner-large {
+  width: 48px;
+  height: 48px;
+}
+
+.spinner-circle {
+  width: 100%;
+  height: 100%;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-small .spinner-circle {
+  border-width: 2px;
+}
+
+.loading-spinner-medium .spinner-circle {
+  border-width: 3px;
+}
+
+.loading-spinner-large .spinner-circle {
+  border-width: 4px;
+}
+
+.loading-message {
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+  font-weight: 500;
+}
+
+.loading-overlay .loading-message {
+  color: white;
+  font-size: 16px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Inline loading indicators for specific components */
+.queue-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #f3f4f6;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.config-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #3b82f6;
+}
+
+.cookie-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #d97706;
+}
+
+/* Button loading states */
+.button-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.button-loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Progress bar loading */
+.progress-loading {
+  width: 100%;
+  height: 4px;
+  background-color: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  animation: loading-progress 1.5s infinite;
+}
+
+@keyframes loading-progress {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
