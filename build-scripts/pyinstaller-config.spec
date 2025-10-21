@@ -82,6 +82,10 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+# Set output directory to the sidecars directory
+import os
+output_dir = os.path.join(os.path.dirname(spec_dir), "src-tauri", "sidecars", "dist")
+
 exe = EXE(
     pyz,
     a.scripts,

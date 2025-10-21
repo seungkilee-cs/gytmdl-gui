@@ -1,0 +1,14 @@
+{
+  "binary_name": "gytmdl-x86_64-apple-darwin",
+  "platform": {
+    "os": "macos",
+    "arch": "x86_64",
+    "target": "x86_64-apple-darwin",
+    "extension": ""
+  },
+  "size_bytes": 173,
+  "sha256": "89190d81eed58110d827456a5124e01ed000ee2c09bdc8b26b4988a26be08919",
+  "build_timestamp": "mock-build-2024-01-01T00:00:00Z",
+  "is_mock": true,
+  "is_current_platform": false
+}

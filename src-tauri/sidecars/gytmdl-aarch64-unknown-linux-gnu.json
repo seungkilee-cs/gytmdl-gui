@@ -1,0 +1,14 @@
+{
+  "binary_name": "gytmdl-aarch64-unknown-linux-gnu",
+  "platform": {
+    "os": "linux",
+    "arch": "aarch64",
+    "target": "aarch64-unknown-linux-gnu",
+    "extension": ""
+  },
+  "size_bytes": 179,
+  "sha256": "38344470918394fc2d0ee7eda8abbebf79a4abfa2ab7d8e69925f68734a6615a",
+  "build_timestamp": "mock-build-2024-01-01T00:00:00Z",
+  "is_mock": true,
+  "is_current_platform": false
+}

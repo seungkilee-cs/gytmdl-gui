@@ -1,12 +1,14 @@
 {
-    "binary_name": "gytmdl-aarch64-apple-darwin",
-    "platform": {
-        "os": "darwin",
-        "arch": "9223372036854775807",
-        "target": "mock-target",
-        "extension": ""
-    },
-    "size_bytes": 2063,
-    "sha256": "mock-hash-for-testing",
-    "build_timestamp": "2024-01-01T00:00:00Z"
+  "binary_name": "gytmdl-aarch64-apple-darwin",
+  "platform": {
+    "os": "macos",
+    "arch": "aarch64",
+    "target": "aarch64-apple-darwin",
+    "extension": ""
+  },
+  "size_bytes": 328,
+  "sha256": "ca9c9bef85db7d684f71daf76569ed4a2a1cd33824c55339c9413706b6a407fb",
+  "build_timestamp": "mock-build-2024-01-01T00:00:00Z",
+  "is_mock": true,
+  "is_current_platform": true
 }

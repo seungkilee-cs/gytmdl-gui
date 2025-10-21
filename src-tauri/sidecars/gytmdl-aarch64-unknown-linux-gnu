@@ -1,0 +1,5 @@
+#!/bin/bash
+echo "gytmdl mock binary for Linux ARM64"
+echo "Platform: aarch64-unknown-linux-gnu"
+echo "This binary should be replaced with a real build for production use"
+exit 1

@@ -1,0 +1,14 @@
+{
+  "binary_name": "gytmdl-x86_64-pc-windows-msvc.exe",
+  "platform": {
+    "os": "windows",
+    "arch": "x86_64",
+    "target": "x86_64-pc-windows-msvc",
+    "extension": ".exe"
+  },
+  "size_bytes": 171,
+  "sha256": "94fc20af669ec083fffa2d1f30fac009cfb34860c29f2e813fd9160bb65bd235",
+  "build_timestamp": "mock-build-2024-01-01T00:00:00Z",
+  "is_mock": true,
+  "is_current_platform": false
+}

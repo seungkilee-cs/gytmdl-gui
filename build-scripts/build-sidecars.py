@@ -166,18 +166,29 @@ class SidecarBuilder:
                 print(f"STDERR: {result.stderr}")
                 return None
             
-            # Find the generated binary
-            expected_binary = self.dist_dir / binary_name
-            if not expected_binary.exists():
-                # PyInstaller might have created it without the full target name
+            # Find the generated binary in PyInstaller's dist directory
+            pyinstaller_dist = self.gytmdl_src / "dist"
+            expected_binary = self.output_dir / binary_name
+            
+            # PyInstaller creates the binary in its own dist directory
+            source_binary = pyinstaller_dist / binary_name
+            if not source_binary.exists():
+                # Try without the full target name
                 simple_name = f"gytmdl{platform_info['extension']}"
-                simple_binary = self.dist_dir / simple_name
-                if simple_binary.exists():
-                    # Rename to the expected name
-                    simple_binary.rename(expected_binary)
-                else:
-                    print(f"✗ Binary not found at {expected_binary} or {simple_binary}")
-                    return None
+                source_binary = pyinstaller_dist / simple_name
+            
+            if source_binary.exists():
+                # Copy to our output directory
+                shutil.copy2(source_binary, expected_binary)
+                print(f"✓ Binary copied to: {expected_binary}")
+            else:
+                print(f"✗ Binary not found in PyInstaller dist directory")
+                # List what's actually in the dist directory
+                if pyinstaller_dist.exists():
+                    print(f"Contents of {pyinstaller_dist}:")
+                    for item in pyinstaller_dist.iterdir():
+                        print(f"  - {item.name}")
+                return None
             
             print(f"✓ Binary built successfully: {expected_binary}")
             return expected_binary

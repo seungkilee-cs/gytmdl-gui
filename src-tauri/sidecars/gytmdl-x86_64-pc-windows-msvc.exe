@@ -1,0 +1,5 @@
+@echo off
+echo gytmdl mock binary for Windows x64
+echo Platform: x86_64-pc-windows-msvc
+echo This binary should be replaced with a real build for production use
+exit /b 1
