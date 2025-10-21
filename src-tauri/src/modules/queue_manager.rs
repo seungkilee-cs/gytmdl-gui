@@ -192,11 +192,37 @@ impl QueueManager {
             state_guard.update_job_progress(&job_id, ProgressParser::create_initializing_progress());
         }
 
+        // Debug: Log the binary path and command being used
+        println!("DEBUG: Attempting to spawn gytmdl process for job {}", job_id);
+        println!("DEBUG: Binary path: {:?}", gytmdl_wrapper.get_binary_path());
+        
+        // Test binary first
+        match gytmdl_wrapper.test_binary().await {
+            Ok(version) => {
+                println!("DEBUG: Binary test successful, version: {}", version);
+            }
+            Err(e) => {
+                let error_msg = format!("Binary test failed: {}. Binary path: {:?}", e, gytmdl_wrapper.get_binary_path());
+                println!("DEBUG: {}", error_msg);
+                return JobResult::Failed(job_id, error_msg);
+            }
+        }
+
         // Spawn the gytmdl process
         let mut process = match gytmdl_wrapper.spawn_download_process(&config, &job).await {
-            Ok(process) => process,
+            Ok(process) => {
+                println!("DEBUG: Process spawned successfully with PID: {:?}", process.process_id());
+                process
+            },
             Err(e) => {
-                return JobResult::Failed(job_id, format!("Failed to spawn process: {}", e));
+                let error_msg = match e {
+                    crate::modules::gytmdl_wrapper::GytmdlError::BinaryNotFound(_) => {
+                        format!("gytmdl binary not found. Please build sidecar binaries or install gytmdl. Error: {}", e)
+                    }
+                    _ => format!("Failed to spawn process: {}", e)
+                };
+                println!("DEBUG: Process spawn failed: {}", error_msg);
+                return JobResult::Failed(job_id, error_msg);
             }
         };
 
@@ -208,10 +234,28 @@ impl QueueManager {
             // Check if process has finished first
             match process.try_wait() {
                 Ok(Some(exit_status)) => {
+                    println!("DEBUG: Process exited with status: {:?}", exit_status);
                     if exit_status.success() {
+                        println!("DEBUG: Process completed successfully");
                         return JobResult::Success(job_id);
                     } else {
-                        let error_msg = format!("Process exited with code: {:?}", exit_status.code());
+                        let error_msg = match exit_status.code() {
+                            Some(2) => {
+                                let msg = format!("gytmdl process failed with exit code 2. Binary path: {:?}. This usually means the binary is not working correctly or missing dependencies.", gytmdl_wrapper.get_binary_path());
+                                println!("DEBUG: {}", msg);
+                                msg
+                            },
+                            Some(code) => {
+                                let msg = format!("Process exited with code: {}. Binary path: {:?}", code, gytmdl_wrapper.get_binary_path());
+                                println!("DEBUG: {}", msg);
+                                msg
+                            },
+                            None => {
+                                let msg = format!("Process was terminated by signal. Binary path: {:?}", gytmdl_wrapper.get_binary_path());
+                                println!("DEBUG: {}", msg);
+                                msg
+                            },
+                        };
                         return JobResult::Failed(job_id, error_msg);
                     }
                 }
@@ -254,10 +298,12 @@ impl QueueManager {
             if !stderr_done {
                 match process.read_stderr_line().await {
                     Ok(Some(line)) => {
+                        println!("DEBUG: gytmdl stderr: {}", line);
                         let sanitized_line = ProgressParser::sanitize_output(&line);
                         
                         // Check for errors
                         if ProgressParser::is_error_line(&sanitized_line) {
+                            println!("DEBUG: Error detected in stderr: {}", sanitized_line);
                             return JobResult::Failed(job_id, sanitized_line);
                         }
                         

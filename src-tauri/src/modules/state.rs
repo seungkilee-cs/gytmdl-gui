@@ -96,14 +96,14 @@ pub struct AppConfig {
     pub no_synced_lyrics: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DownloadMode {
     Audio,
     Video,
     AudioVideo,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CoverFormat {
     Jpg,
     Png,
@@ -124,10 +124,10 @@ impl Default for AppState {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            output_path: PathBuf::from("./downloads"),
-            temp_path: PathBuf::from("./temp"),
+            output_path: PathBuf::from("../downloads"),
+            temp_path: PathBuf::from("../temp"),
             cookies_path: None,
-            itag: "141".to_string(),
+            itag: "140".to_string(),
             download_mode: DownloadMode::Audio,
             concurrent_limit: 3,
             cover_size: 1400,

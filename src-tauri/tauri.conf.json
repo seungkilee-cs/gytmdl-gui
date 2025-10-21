@@ -14,11 +14,27 @@
       {
         "title": "gytmdl-gui",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "theme": "Light"
       }
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://releases.myapp.com/{{target}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBQUFBQUFBQUFBQUFBQUE="
     }
   },
   "bundle": {
@@ -30,6 +46,55 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "Copyright © 2024 gytmdl-gui contributors",
+    "category": "Multimedia",
+    "shortDescription": "YouTube Music downloader with GUI",
+    "longDescription": "A cross-platform GUI application for downloading music from YouTube Music using gytmdl",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "tsp": false,
+      "wix": {
+        "language": ["en-US"],
+        "template": "wix-template.wxs"
+      },
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["English"],
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine"
+      }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": "entitlements.plist",
+      "hardenedRuntime": true
+    },
+    "linux": {
+      "deb": {
+        "depends": [],
+        "section": "sound",
+        "priority": "optional",
+        "preInstallScript": "scripts/preinst.sh",
+        "postInstallScript": "scripts/postinst.sh",
+        "preRemoveScript": "scripts/prerm.sh",
+        "postRemoveScript": "scripts/postrm.sh"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "rpm": {
+        "epoch": 0,
+        "release": "1"
+      }
+    }
   }
 }

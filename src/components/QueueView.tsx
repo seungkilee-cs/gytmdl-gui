@@ -68,9 +68,16 @@ const QueueView: React.FC = () => {
     setError(null);
 
     try {
-      await invoke('add_to_queue', { url: url.trim() });
-      setUrlInput('');
-      await loadQueue();
+      const response = await invoke('add_to_queue', { 
+        request: { url: url.trim() } 
+      }) as { success: boolean; job_id?: string; error?: string };
+      
+      if (response.success) {
+        setUrlInput('');
+        await loadQueue();
+      } else {
+        setError(response.error || 'Failed to add URL');
+      }
     } catch (err) {
       setError(`Failed to add URL: ${err}`);
     } finally {

@@ -1,0 +1,243 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-sidecars:
+    name: Build Sidecar Binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            target: 'x86_64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
+          - platform: 'ubuntu-20.04'
+            args: '--target x86_64-unknown-linux-gnu'
+            target: 'x86_64-unknown-linux-gnu'
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+            target: 'x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Checkout gytmdl
+        uses: actions/checkout@v4
+        with:
+          repository: 'gytmdl/gytmdl'  # Replace with actual gytmdl repo
+          path: 'gytmdl'
+
+      - name: Build sidecar binary (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          chmod +x gytmdl-gui/build-scripts/build-all-platforms.sh
+          cd gytmdl-gui && ./build-scripts/build-all-platforms.sh
+
+      - name: Build sidecar binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cd gytmdl-gui
+          .\build-scripts\build-all-platforms.bat
+
+      - name: Upload sidecar artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: gytmdl-gui/src-tauri/sidecars/
+
+  build-tauri:
+    name: Build Tauri App
+    needs: build-sidecars
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            target: 'x86_64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
+          - platform: 'ubuntu-20.04'
+            args: '--target x86_64-unknown-linux-gnu'
+            target: 'x86_64-unknown-linux-gnu'
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+            target: 'x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-20.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Download sidecar artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: gytmdl-gui/src-tauri/sidecars/
+
+      - name: Make sidecar binaries executable (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: chmod +x gytmdl-gui/src-tauri/sidecars/*
+
+      - name: Install frontend dependencies
+        run: |
+          cd gytmdl-gui
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd gytmdl-gui
+          npm run build
+
+      - name: Install Tauri CLI
+        run: |
+          cd gytmdl-gui
+          cargo install tauri-cli
+
+      - name: Build Tauri app
+        run: |
+          cd gytmdl-gui
+          cargo tauri build ${{ matrix.args }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: tauri-app-${{ matrix.target }}
+          path: |
+            gytmdl-gui/src-tauri/target/*/release/bundle/
+            !gytmdl-gui/src-tauri/target/*/release/bundle/**/.*
+
+  create-release:
+    name: Create Release
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Collect release assets
+        run: |
+          # Collect all built installers
+          find . -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*-setup.exe" | while read file; do
+            cp "$file" release/
+          done
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-installers:
+    name: Test Installers
+    needs: build-tauri
+    strategy:
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
+            installer: '*.dmg'
+          - platform: 'ubuntu-20.04'
+            target: 'x86_64-unknown-linux-gnu'
+            installer: '*.deb'
+          - platform: 'windows-latest'
+            target: 'x86_64-pc-windows-msvc'
+            installer: '*.msi'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: tauri-app-${{ matrix.target }}
+
+      - name: Test installer (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Mount DMG and verify contents
+          dmg_file=$(find . -name "*.dmg" | head -1)
+          if [ -n "$dmg_file" ]; then
+            hdiutil attach "$dmg_file"
+            ls -la /Volumes/*/
+            hdiutil detach /Volumes/gytmdl-gui* || true
+          fi
+
+      - name: Test installer (Linux)
+        if: matrix.platform == 'ubuntu-20.04'
+        run: |
+          # Test DEB package
+          deb_file=$(find . -name "*.deb" | head -1)
+          if [ -n "$deb_file" ]; then
+            dpkg-deb --info "$deb_file"
+            dpkg-deb --contents "$deb_file"
+          fi
+
+      - name: Test installer (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          # Test MSI package (basic validation)
+          $msi_file = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
+          if ($msi_file) {
+            Write-Host "Found MSI: $($msi_file.FullName)"
+            # Could add more validation here
+          }

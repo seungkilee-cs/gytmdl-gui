@@ -4,6 +4,7 @@ use modules::state::{AppState, AppConfig, DownloadJob, JobStatus};
 use modules::config_manager::ConfigManager;
 use modules::queue_manager::QueueManager;
 use modules::cookie_manager::CookieManager;
+use modules::sidecar_manager::{get_sidecar_status, validate_sidecar_binaries, select_best_sidecar, check_sidecar_compatibility};
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
@@ -535,7 +536,12 @@ pub fn run() {
             remove_job,
             clear_completed_jobs,
             // Utility Commands
-            save_state
+            save_state,
+            // Sidecar Management Commands
+            get_sidecar_status,
+            validate_sidecar_binaries,
+            select_best_sidecar,
+            check_sidecar_compatibility
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

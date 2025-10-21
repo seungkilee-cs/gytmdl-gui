@@ -1,0 +1,60 @@
+{
+  "release": true,
+  "target": null,
+  "code_signing": {
+    "enabled": false,
+    "windows": {
+      "certificate_path": "",
+      "certificate_password": "",
+      "timestamp_url": "http://timestamp.digicert.com"
+    },
+    "macos": {
+      "signing_identity": "",
+      "notarize": false,
+      "apple_id": "",
+      "app_password": "",
+      "team_id": ""
+    }
+  },
+  "updater": {
+    "enabled": true,
+    "endpoint": "https://releases.myapp.com",
+    "public_key": ""
+  },
+  "bundle": {
+    "windows": {
+      "wix": {
+        "enabled": true,
+        "language": ["en-US"]
+      },
+      "nsis": {
+        "enabled": true,
+        "install_mode": "perMachine"
+      }
+    },
+    "macos": {
+      "dmg": {
+        "enabled": true,
+        "background": null,
+        "window_size": {
+          "width": 660,
+          "height": 400
+        }
+      }
+    },
+    "linux": {
+      "deb": {
+        "enabled": true,
+        "section": "sound",
+        "priority": "optional"
+      },
+      "rpm": {
+        "enabled": true,
+        "license": "MIT"
+      },
+      "appimage": {
+        "enabled": true
+      }
+    }
+  }
+}
