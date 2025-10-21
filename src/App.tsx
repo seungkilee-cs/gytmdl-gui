@@ -6,10 +6,20 @@ import "./App.css";
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
   const [name, setName] = useState("");
+  const [configMsg, setConfigMsg] = useState("");
 
   async function greet() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     setGreetMsg(await invoke("greet", { name }));
+  }
+
+  async function testConfig() {
+    try {
+      const config = await invoke("get_config");
+      setConfigMsg(`Config loaded! Output path: ${(config as any).output_path}`);
+    } catch (error) {
+      setConfigMsg(`Error: ${error}`);
+    }
   }
 
   return (
@@ -44,6 +54,11 @@ function App() {
         <button type="submit">Greet</button>
       </form>
       <p>{greetMsg}</p>
+
+      <div className="row">
+        <button onClick={testConfig}>Test Config Loading</button>
+      </div>
+      <p>{configMsg}</p>
     </main>
   );
 }
