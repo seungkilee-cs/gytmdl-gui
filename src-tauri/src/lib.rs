@@ -1,4 +1,4 @@
-mod modules;
+pub mod modules;
 
 use modules::state::{AppState, AppConfig};
 use modules::config_manager::ConfigManager;
