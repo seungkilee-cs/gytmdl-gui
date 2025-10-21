@@ -1,0 +1,570 @@
+.cookie-manager {
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Header */
+.cookie-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.cookie-header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.cookie-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Messages */
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: var(--border-radius);
+  color: #155724;
+  font-weight: 500;
+}
+
+.error-message {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: var(--border-radius);
+  color: #721c24;
+  font-weight: 500;
+}
+
+.error-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #721c24;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sections */
+.cookie-status-section,
+.cookie-import-section,
+.po-token-section,
+.instructions-section {
+  margin-bottom: 2rem;
+}
+
+.cookie-status-section h3,
+.cookie-import-section h3,
+.po-token-section h3,
+.instructions-section h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+/* Status Card */
+.status-card {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  transition: var(--transition);
+}
+
+.status-card.valid {
+  border-left: 4px solid #28a745;
+}
+
+.status-card.invalid {
+  border-left: 4px solid #dc3545;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.status-icon {
+  font-size: 1.25rem;
+}
+
+.status-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.status-details {
+  margin-bottom: 1.5rem;
+}
+
+.status-details p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.expiration-info {
+  color: #856404 !important;
+  font-weight: 500;
+}
+
+.po-token-info {
+  color: #155724 !important;
+  font-weight: 500;
+}
+
+.status-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Import Card */
+.import-card {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+}
+
+.file-drop-zone {
+  position: relative;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  text-align: center;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.file-drop-zone:hover {
+  border-color: var(--primary-color);
+  background-color: rgba(100, 108, 255, 0.05);
+}
+
+.file-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drop-zone-content {
+  pointer-events: none;
+}
+
+.upload-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.drop-text {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.drop-subtext {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.upload-button {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  pointer-events: all;
+}
+
+.upload-button:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.upload-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* PO Token Card */
+.po-token-card {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+}
+
+.po-token-description {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.po-token-input-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.po-token-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.po-token-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.1);
+}
+
+.po-token-help details {
+  margin-top: 1rem;
+}
+
+.po-token-help summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--primary-color);
+  font-size: 0.875rem;
+}
+
+.po-token-help ol {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.po-token-help li {
+  margin-bottom: 0.25rem;
+}
+
+/* Instructions */
+.instructions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.toggle-instructions {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+}
+
+.toggle-instructions:hover {
+  background-color: rgba(100, 108, 255, 0.1);
+}
+
+.instructions-content {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.browser-selector {
+  margin-bottom: 1.5rem;
+}
+
+.browser-selector label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--text-color);
+  font-size: 0.875rem;
+}
+
+.browser-selector select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.875rem;
+}
+
+.browser-instructions h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.browser-instructions ol {
+  margin: 0 0 1.5rem 1rem;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+.browser-instructions li {
+  margin-bottom: 0.5rem;
+}
+
+.extension-link {
+  text-align: center;
+}
+
+.extension-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  text-decoration: none;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: var(--transition);
+}
+
+.extension-button:hover {
+  background-color: var(--primary-hover);
+  text-decoration: none;
+}
+
+.important-notes {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.important-notes h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #856404;
+}
+
+.important-notes ul {
+  margin: 0 0 0 1rem;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.important-notes li {
+  margin-bottom: 0.5rem;
+}
+
+/* Expiration Warning */
+.expiration-warning {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.warning-content {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.warning-icon {
+  font-size: 1.25rem;
+  color: #856404;
+}
+
+.warning-text p {
+  margin: 0;
+  color: #856404;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.warning-text p:first-child {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* Button Styles */
+button.primary {
+  background-color: var(--primary-color);
+  color: white;
+  border: 1px solid var(--primary-color);
+}
+
+button.primary:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+button.secondary {
+  background-color: var(--surface-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+button.secondary:hover {
+  background-color: var(--border-color);
+}
+
+button.danger {
+  background-color: #dc3545;
+  color: white;
+  border: 1px solid #dc3545;
+}
+
+button.danger:hover:not(:disabled) {
+  background-color: #c82333;
+  border-color: #c82333;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .cookie-manager {
+    padding: 1rem;
+  }
+  
+  .status-actions {
+    flex-direction: column;
+  }
+  
+  .po-token-input-group {
+    flex-direction: column;
+  }
+  
+  .instructions-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .warning-content {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .cookie-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .file-drop-zone {
+    padding: 1.5rem 1rem;
+  }
+  
+  .upload-icon {
+    font-size: 1.5rem;
+  }
+}
+
+/* Dark Mode Adjustments */
+@media (prefers-color-scheme: dark) {
+  .success-message {
+    background-color: #1b4332;
+    border-color: #2d5a3d;
+    color: #4ade80;
+  }
+  
+  .error-message {
+    background-color: #2d1b1b;
+    border-color: #5a2d2d;
+    color: #ff6b6b;
+  }
+  
+  .error-close {
+    color: #ff6b6b;
+  }
+  
+  .expiration-warning {
+    background-color: #2d2416;
+    border-color: #5a4a2d;
+  }
+  
+  .warning-icon,
+  .warning-text p {
+    color: #fbbf24;
+  }
+  
+  .important-notes h4 {
+    color: #fbbf24;
+  }
+  
+  .expiration-info {
+    color: #fbbf24 !important;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Focus Styles for Accessibility */
+.file-input:focus-visible + .drop-zone-content,
+.po-token-input:focus-visible,
+.toggle-instructions:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}

@@ -7,6 +7,7 @@ use modules::cookie_manager::CookieManager;
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
+use tauri::Manager;
 
 /// Application context that holds shared state and managers
 pub struct AppContext {
@@ -54,16 +55,38 @@ fn greet(name: &str) -> String {
 
 // Queue Management Commands (Task 5.1)
 
+#[derive(serde::Serialize)]
+struct AddJobResponse {
+    success: bool,
+    job_id: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct AddJobRequest {
+    url: String,
+}
+
 #[tauri::command]
-async fn add_to_queue(url: String, context: tauri::State<'_, Arc<AppContext>>) -> Result<String, String> {
+async fn add_to_queue(request: AddJobRequest, context: tauri::State<'_, Arc<AppContext>>) -> Result<AddJobResponse, String> {
+    let url = request.url;
+    
     // Validate URL format
     if url.trim().is_empty() {
-        return Err("URL cannot be empty".to_string());
+        return Ok(AddJobResponse {
+            success: false,
+            job_id: None,
+            error: Some("URL cannot be empty".to_string()),
+        });
     }
 
     // Basic URL validation - check if it's a valid HTTP/HTTPS URL
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("URL must start with http:// or https://".to_string());
+        return Ok(AddJobResponse {
+            success: false,
+            job_id: None,
+            error: Some("URL must start with http:// or https://".to_string()),
+        });
     }
 
     // Check if it's a YouTube Music URL
@@ -71,7 +94,11 @@ async fn add_to_queue(url: String, context: tauri::State<'_, Arc<AppContext>>) -
        !url.contains("youtube.com/watch") &&
        !url.contains("youtube.com/playlist") &&
        !url.contains("youtu.be/") {
-        return Err("URL must be a valid YouTube Music URL".to_string());
+        return Ok(AddJobResponse {
+            success: false,
+            job_id: None,
+            error: Some("URL must be a valid YouTube Music URL".to_string()),
+        });
     }
 
     // Add job to state
@@ -86,17 +113,36 @@ async fn add_to_queue(url: String, context: tauri::State<'_, Arc<AppContext>>) -
             // If submission fails, remove the job from state
             let mut state_guard = context.state.write().await;
             state_guard.remove_job(&job_id);
-            return Err(format!("Failed to submit job to queue: {}", e));
+            return Ok(AddJobResponse {
+                success: false,
+                job_id: None,
+                error: Some(format!("Failed to submit job to queue: {}", e)),
+            });
         }
     }
 
-    Ok(job_id)
+    Ok(AddJobResponse {
+        success: true,
+        job_id: Some(job_id),
+        error: None,
+    })
+}
+
+#[derive(serde::Serialize)]
+struct QueueState {
+    jobs: Vec<DownloadJob>,
+    is_paused: bool,
+    concurrent_limit: usize,
 }
 
 #[tauri::command]
-async fn get_queue(context: tauri::State<'_, Arc<AppContext>>) -> Result<Vec<DownloadJob>, String> {
+async fn get_queue(context: tauri::State<'_, Arc<AppContext>>) -> Result<QueueState, String> {
     let state_guard = context.state.read().await;
-    Ok(state_guard.jobs.clone())
+    Ok(QueueState {
+        jobs: state_guard.jobs.clone(),
+        is_paused: state_guard.is_paused,
+        concurrent_limit: state_guard.config.concurrent_limit,
+    })
 }
 
 #[tauri::command]
@@ -211,6 +257,29 @@ fn initialize_app_state() -> Arc<RwLock<AppState>> {
 }
 
 #[tauri::command]
+async fn remove_job(job_id: String, context: tauri::State<'_, Arc<AppContext>>) -> Result<(), String> {
+    // Check if job exists
+    {
+        let state_guard = context.state.read().await;
+        if state_guard.get_job(&job_id).is_none() {
+            return Err("Job not found".to_string());
+        }
+    }
+
+    // Remove job from state
+    let mut state_guard = context.state.write().await;
+    state_guard.remove_job(&job_id);
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_completed_jobs(context: tauri::State<'_, Arc<AppContext>>) -> Result<(), String> {
+    let mut state_guard = context.state.write().await;
+    state_guard.jobs.retain(|job| job.status != JobStatus::Completed);
+    Ok(())
+}
+
+#[tauri::command]
 async fn save_state(context: tauri::State<'_, Arc<AppContext>>) -> Result<(), String> {
     let state_guard = context.state.read().await;
     let state_file = get_state_file_path();
@@ -229,29 +298,34 @@ async fn get_config(context: tauri::State<'_, Arc<AppContext>>) -> Result<AppCon
     Ok(state_guard.config.clone())
 }
 
+#[derive(serde::Deserialize)]
+struct UpdateConfigRequest {
+    config: AppConfig,
+}
+
 #[tauri::command]
 async fn update_config(
-    new_config: AppConfig,
+    request: UpdateConfigRequest,
     context: tauri::State<'_, Arc<AppContext>>
 ) -> Result<(), String> {
     let config_manager = ConfigManager::with_default_path();
     
     // Validate the new config
-    config_manager.validate_config(&new_config)
+    config_manager.validate_config(&request.config)
         .map_err(|e| format!("Configuration validation failed: {}", e))?;
     
     // Update the state
     {
         let mut state_guard = context.state.write().await;
-        state_guard.config = new_config.clone();
+        state_guard.config = request.config.clone();
     }
     
     // Save the config to file
-    config_manager.save_config(&new_config)
+    config_manager.save_config(&request.config)
         .map_err(|e| format!("Failed to save configuration: {}", e))?;
     
     // Update queue manager concurrent limit if it changed
-    if let Some(queue_manager) = context.queue_manager.read().await.as_ref() {
+    if let Some(_queue_manager) = context.queue_manager.read().await.as_ref() {
         // Note: QueueManager::set_concurrent_limit requires &mut self, 
         // so we'd need to restructure this or add a method that works with Arc<RwLock<>>
         // For now, we'll just log that the limit should be updated on next restart
@@ -281,31 +355,122 @@ async fn reset_config_to_defaults(
     Ok(default_config)
 }
 
+#[derive(serde::Serialize)]
+struct ConfigValidationError {
+    field: String,
+    message: String,
+}
+
+#[derive(serde::Serialize)]
+struct ConfigValidationResult {
+    #[serde(rename = "isValid")]
+    is_valid: bool,
+    errors: Vec<ConfigValidationError>,
+}
+
+#[derive(serde::Deserialize)]
+struct ValidateConfigRequest {
+    config: AppConfig,
+}
+
 #[tauri::command]
-async fn validate_config(config: AppConfig) -> Result<(), String> {
+async fn validate_config(request: ValidateConfigRequest) -> Result<ConfigValidationResult, String> {
     let config_manager = ConfigManager::with_default_path();
-    config_manager.validate_config(&config)
-        .map_err(|e| format!("Configuration validation failed: {}", e))?;
-    Ok(())
+    
+    match config_manager.validate_config(&request.config) {
+        Ok(()) => Ok(ConfigValidationResult {
+            is_valid: true,
+            errors: vec![],
+        }),
+        Err(e) => Ok(ConfigValidationResult {
+            is_valid: false,
+            errors: vec![ConfigValidationError {
+                field: "general".to_string(),
+                message: e.to_string(),
+            }],
+        })
+    }
 }
 
 // Cookie Management Commands (Task 5.3)
 
-#[tauri::command]
-async fn import_cookies(file_path: String, context: tauri::State<'_, Arc<AppContext>>) -> Result<modules::cookie_manager::CookieInfo, String> {
-    let cookie_manager = context.cookie_manager.read().await;
-    let source_path = std::path::Path::new(&file_path);
-    
-    cookie_manager.import_cookies(source_path).await
-        .map_err(|e| e.to_string())
+#[derive(serde::Serialize)]
+struct CookieImportResult {
+    success: bool,
+    cookies_count: Option<usize>,
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct CookieImportRequest {
+    file_path: String,
 }
 
 #[tauri::command]
-async fn validate_cookies(context: tauri::State<'_, Arc<AppContext>>) -> Result<modules::cookie_manager::CookieInfo, String> {
+async fn import_cookies(request: CookieImportRequest, context: tauri::State<'_, Arc<AppContext>>) -> Result<CookieImportResult, String> {
+    let cookie_manager = context.cookie_manager.read().await;
+    let source_path = std::path::Path::new(&request.file_path);
+    
+    match cookie_manager.import_cookies(source_path).await {
+        Ok(_cookie_info) => Ok(CookieImportResult {
+            success: true,
+            cookies_count: Some(1), // We don't track individual cookie count, just indicate success
+            error: None,
+        }),
+        Err(e) => Ok(CookieImportResult {
+            success: false,
+            cookies_count: None,
+            error: Some(e.to_string()),
+        })
+    }
+}
+
+#[derive(serde::Serialize)]
+struct CookieValidationResult {
+    is_valid: bool,
+    expiration_date: Option<String>,
+    days_until_expiry: Option<i64>,
+    has_po_token: bool,
+    error: Option<String>,
+}
+
+#[tauri::command]
+async fn validate_cookies(context: tauri::State<'_, Arc<AppContext>>) -> Result<CookieValidationResult, String> {
     let cookie_manager = context.cookie_manager.read().await;
     
-    cookie_manager.validate_cookies().await
-        .map_err(|e| e.to_string())
+    match cookie_manager.validate_cookies().await {
+        Ok(cookie_info) => {
+            // Extract days until expiry from expiration_warning if available
+            let days_until_expiry = if let Some(ref warning) = cookie_info.expiration_warning {
+                // Try to extract number of days from warning message
+                if warning.contains("expires in") {
+                    warning.split("expires in ")
+                        .nth(1)
+                        .and_then(|s| s.split(" days").next())
+                        .and_then(|s| s.parse::<i64>().ok())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            Ok(CookieValidationResult {
+                is_valid: cookie_info.is_valid,
+                expiration_date: cookie_info.expiration_warning.clone(),
+                days_until_expiry,
+                has_po_token: cookie_info.po_token_present,
+                error: None,
+            })
+        },
+        Err(e) => Ok(CookieValidationResult {
+            is_valid: false,
+            expiration_date: None,
+            days_until_expiry: None,
+            has_po_token: false,
+            error: Some(e.to_string()),
+        })
+    }
 }
 
 #[tauri::command]
@@ -328,20 +493,25 @@ pub fn run() {
     let app_state = initialize_app_state();
     let app_context = Arc::new(AppContext::new(app_state));
 
-    // Initialize queue manager in a separate task
-    let context_for_init = Arc::clone(&app_context);
-    tokio::spawn(async move {
-        if let Err(e) = context_for_init.initialize_queue_manager().await {
-            eprintln!("Failed to initialize queue manager: {}", e);
-            eprintln!("Queue functionality will be limited until gytmdl binary is available");
-        } else {
-            println!("Queue manager initialized successfully");
-        }
-    });
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(app_context)
+        .setup(|app| {
+            // Initialize queue manager after Tauri runtime is available
+            let app_context = app.state::<Arc<AppContext>>();
+            let context_for_init: Arc<AppContext> = Arc::clone(app_context.inner());
+            
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = context_for_init.initialize_queue_manager().await {
+                    eprintln!("Failed to initialize queue manager: {}", e);
+                    eprintln!("Queue functionality will be limited until gytmdl binary is available");
+                } else {
+                    println!("Queue manager initialized successfully");
+                }
+            });
+            
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             // Queue Management Commands
@@ -361,6 +531,9 @@ pub fn run() {
             validate_cookies,
             get_cookies_path,
             clear_cookies,
+            // Additional Queue Commands
+            remove_job,
+            clear_completed_jobs,
             // Utility Commands
             save_state
         ])
