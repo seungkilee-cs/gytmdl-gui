@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Network access for downloading -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    
+    <!-- File system access for downloads -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    
+    <!-- Allow downloads folder access -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+    
+    <!-- Allow temporary file access -->
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+    <array>
+        <string>/tmp/</string>
+        <string>/var/tmp/</string>
+    </array>
+    
+    <!-- Allow subprocess execution for gytmdl binary -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    
+    <!-- Disable library validation for sidecar binaries -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    
+    <!-- Allow JIT for potential Python components -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    
+    <!-- Hardened runtime compatibility -->
+    <key>com.apple.security.cs.debugger</key>
+    <false/>
+</dict>
+</plist>

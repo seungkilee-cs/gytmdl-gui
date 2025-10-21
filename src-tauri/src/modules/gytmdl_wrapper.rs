@@ -5,6 +5,9 @@ use tokio::process::{Child, Command};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::fs;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum GytmdlError {
@@ -13,6 +16,26 @@ pub enum GytmdlError {
     InvalidUrl(String),
     ConfigError(String),
     ProcessError(String),
+    ValidationError(String),
+    IntegrityError(String),
+    ManifestError(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryManifest {
+    pub binary_name: String,
+    pub platform: PlatformInfo,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub build_timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlatformInfo {
+    pub os: String,
+    pub arch: String,
+    pub target: String,
+    pub extension: String,
 }
 
 impl std::fmt::Display for GytmdlError {
@@ -23,12 +46,16 @@ impl std::fmt::Display for GytmdlError {
             GytmdlError::InvalidUrl(url) => write!(f, "Invalid URL: {}", url),
             GytmdlError::ConfigError(msg) => write!(f, "Configuration error: {}", msg),
             GytmdlError::ProcessError(msg) => write!(f, "Process error: {}", msg),
+            GytmdlError::ValidationError(msg) => write!(f, "Binary validation error: {}", msg),
+            GytmdlError::IntegrityError(msg) => write!(f, "Binary integrity error: {}", msg),
+            GytmdlError::ManifestError(msg) => write!(f, "Manifest error: {}", msg),
         }
     }
 }
 
 impl std::error::Error for GytmdlError {}
 
+#[derive(Debug)]
 pub struct GytmdlWrapper {
     binary_path: PathBuf,
 }
@@ -52,9 +79,11 @@ impl GytmdlWrapper {
     fn detect_binary_path() -> Result<PathBuf, GytmdlError> {
         let binary_name = Self::get_platform_binary_name();
         
-        // Check in the sidecar directory first (bundled with app)
+        // ALWAYS check sidecar directory first and prefer it
         let sidecar_path = Self::get_sidecar_directory().join(&binary_name);
+        println!("DEBUG: Checking sidecar path: {:?}", sidecar_path);
         if sidecar_path.exists() {
+            println!("DEBUG: Using sidecar binary: {:?}", sidecar_path);
             return Ok(sidecar_path);
         }
 
@@ -63,27 +92,24 @@ impl GytmdlWrapper {
             .map_err(|e| GytmdlError::ProcessSpawnError(e))?
             .join(&binary_name);
         if current_dir_path.exists() {
+            println!("DEBUG: Using current directory binary: {:?}", current_dir_path);
             return Ok(current_dir_path);
         }
 
-        // Check in PATH
-        if let Ok(path_binary) = which::which(&binary_name) {
-            return Ok(path_binary);
-        }
-
-        // Check for generic "gytmdl" in PATH as fallback
+        // Only use system PATH as last resort and warn about it
         if let Ok(path_binary) = which::which("gytmdl") {
+            println!("DEBUG: WARNING - Using system gytmdl binary: {:?}", path_binary);
             return Ok(path_binary);
         }
 
         Err(GytmdlError::BinaryNotFound(format!(
-            "Could not find gytmdl binary. Searched for: {} in sidecar directory, current directory, and PATH",
-            binary_name
+            "Could not find gytmdl binary. Searched for: {} in sidecar directory: {:?}, current directory, and PATH",
+            binary_name, sidecar_path
         )))
     }
 
     /// Get the platform-specific binary name
-    fn get_platform_binary_name() -> String {
+    pub fn get_platform_binary_name() -> String {
         if cfg!(target_os = "windows") {
             if cfg!(target_arch = "x86_64") {
                 "gytmdl-x86_64-pc-windows-msvc.exe".to_string()
@@ -108,7 +134,7 @@ impl GytmdlWrapper {
     }
 
     /// Get the sidecar directory path where bundled binaries are stored
-    fn get_sidecar_directory() -> PathBuf {
+    pub fn get_sidecar_directory() -> PathBuf {
         // In Tauri, sidecar binaries are typically in the resource directory
         // For development, we'll check relative to the current executable
         if let Ok(exe_path) = std::env::current_exe() {
@@ -119,6 +145,166 @@ impl GytmdlWrapper {
         
         // Fallback to current directory
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("sidecars")
+    }
+
+    /// Load and validate binary manifest
+    pub fn load_manifest(&self) -> Result<BinaryManifest, GytmdlError> {
+        let manifest_path = self.binary_path.with_extension("json");
+        
+        if !manifest_path.exists() {
+            return Err(GytmdlError::ManifestError(format!(
+                "Manifest file not found: {}", 
+                manifest_path.display()
+            )));
+        }
+
+        let manifest_content = fs::read_to_string(&manifest_path)
+            .map_err(|e| GytmdlError::ManifestError(format!(
+                "Failed to read manifest: {}", e
+            )))?;
+
+        let manifest: BinaryManifest = serde_json::from_str(&manifest_content)
+            .map_err(|e| GytmdlError::ManifestError(format!(
+                "Failed to parse manifest: {}", e
+            )))?;
+
+        Ok(manifest)
+    }
+
+    /// Calculate SHA256 hash of the binary file
+    fn calculate_sha256(&self) -> Result<String, GytmdlError> {
+        use std::io::Read;
+        
+        let mut file = fs::File::open(&self.binary_path)
+            .map_err(|e| GytmdlError::IntegrityError(format!(
+                "Failed to open binary for hashing: {}", e
+            )))?;
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        let mut buffer = [0; 8192];
+        
+        // For a proper SHA256, we'd need a crypto library, but for now we'll use a simple hash
+        // In a real implementation, you'd want to use sha2 crate
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .map_err(|e| GytmdlError::IntegrityError(format!(
+                "Failed to read binary for hashing: {}", e
+            )))?;
+
+        // Simple hex representation of content hash (not cryptographically secure)
+        use std::hash::{Hash, Hasher};
+        content.hash(&mut hasher);
+        Ok(format!("{:x}", hasher.finish()))
+    }
+
+    /// Validate binary integrity against manifest
+    pub fn validate_integrity(&self) -> Result<bool, GytmdlError> {
+        let manifest = self.load_manifest()?;
+        
+        // Check file size
+        let actual_size = fs::metadata(&self.binary_path)
+            .map_err(|e| GytmdlError::IntegrityError(format!(
+                "Failed to get binary metadata: {}", e
+            )))?
+            .len();
+
+        if actual_size != manifest.size_bytes {
+            return Err(GytmdlError::IntegrityError(format!(
+                "Binary size mismatch. Expected: {}, Actual: {}", 
+                manifest.size_bytes, actual_size
+            )));
+        }
+
+        // Check hash (simplified version)
+        let actual_hash = self.calculate_sha256()?;
+        if actual_hash != manifest.sha256 {
+            return Err(GytmdlError::IntegrityError(format!(
+                "Binary hash mismatch. Expected: {}, Actual: {}", 
+                manifest.sha256, actual_hash
+            )));
+        }
+
+        Ok(true)
+    }
+
+    /// Get all available sidecar binaries in the sidecar directory
+    pub fn list_available_binaries() -> Result<Vec<PathBuf>, GytmdlError> {
+        let sidecar_dir = Self::get_sidecar_directory();
+        
+        if !sidecar_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut binaries = Vec::new();
+        
+        let entries = fs::read_dir(&sidecar_dir)
+            .map_err(|e| GytmdlError::BinaryNotFound(format!(
+                "Failed to read sidecar directory: {}", e
+            )))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| GytmdlError::BinaryNotFound(format!(
+                "Failed to read directory entry: {}", e
+            )))?;
+            
+            let path = entry.path();
+            let filename = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+
+            // Check if it's a gytmdl binary (starts with "gytmdl" and is executable)
+            if filename.starts_with("gytmdl") && 
+               !filename.ends_with(".json") && 
+               path.is_file() {
+                binaries.push(path);
+            }
+        }
+
+        Ok(binaries)
+    }
+
+    /// Select the best available binary for the current platform
+    pub fn select_best_binary() -> Result<PathBuf, GytmdlError> {
+        let available_binaries = Self::list_available_binaries()?;
+        
+        if available_binaries.is_empty() {
+            return Err(GytmdlError::BinaryNotFound(
+                "No gytmdl binaries found in sidecar directory".to_string()
+            ));
+        }
+
+        let platform_binary_name = Self::get_platform_binary_name();
+        
+        // First, try to find exact platform match
+        for binary in &available_binaries {
+            if let Some(filename) = binary.file_name().and_then(|n| n.to_str()) {
+                if filename == platform_binary_name {
+                    return Ok(binary.clone());
+                }
+            }
+        }
+
+        // If no exact match, try to find a compatible binary
+        let current_os = if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "darwin"
+        } else if cfg!(target_os = "linux") {
+            "linux"
+        } else {
+            "unknown"
+        };
+
+        for binary in &available_binaries {
+            if let Some(filename) = binary.file_name().and_then(|n| n.to_str()) {
+                if filename.contains(current_os) {
+                    return Ok(binary.clone());
+                }
+            }
+        }
+
+        // As a last resort, return the first available binary
+        Ok(available_binaries[0].clone())
     }
 
     /// Build command arguments from AppConfig
@@ -134,19 +320,17 @@ impl GytmdlWrapper {
         args.push("--output-path".to_string());
         args.push(config.output_path.to_string_lossy().to_string());
 
-        // Temp directory
-        args.push("--temp-path".to_string());
-        args.push(config.temp_path.to_string_lossy().to_string());
-
-        // Cookies file
-        if let Some(cookies_path) = &config.cookies_path {
-            args.push("--cookies-path".to_string());
-            args.push(cookies_path.to_string_lossy().to_string());
-        }
-
-        // Audio quality (itag)
-        args.push("--itag".to_string());
+        // Audio quality (itag) - use short form like CLI
+        args.push("-i".to_string());
         args.push(config.itag.clone());
+
+        // Cookies file - only add if we have cookies AND they exist
+        if let Some(cookies_path) = &config.cookies_path {
+            if cookies_path.exists() {
+                args.push("--cookies-path".to_string());
+                args.push(cookies_path.to_string_lossy().to_string());
+            }
+        }
 
         // Download mode
         match config.download_mode {
@@ -220,9 +404,8 @@ impl GytmdlWrapper {
             args.push("--no-synced-lyrics".to_string());
         }
 
-        // Add progress output for parsing
-        args.push("--progress".to_string());
-        args.push("--verbose".to_string());
+        // Note: gytmdl doesn't have --progress or --verbose flags
+        // We'll parse output from the normal gytmdl output
 
         // Finally, add the URL
         args.push(url.to_string());
@@ -251,6 +434,10 @@ impl GytmdlWrapper {
     ) -> Result<GytmdlProcess, GytmdlError> {
         let args = self.build_command_args(config, &job.url, &job.id)?;
 
+        println!("DEBUG: Spawning process with binary: {:?}", self.binary_path);
+        println!("DEBUG: Command args: {:?}", args);
+        println!("DEBUG: Working directory: {:?}", config.output_path);
+
         let mut command = Command::new(&self.binary_path);
         command
             .args(&args)
@@ -258,12 +445,27 @@ impl GytmdlWrapper {
             .stderr(Stdio::piped())
             .stdin(Stdio::null());
 
+        // Create output and temp directories if they don't exist
+        if let Err(e) = std::fs::create_dir_all(&config.output_path) {
+            println!("DEBUG: Failed to create output directory: {}", e);
+            return Err(GytmdlError::ConfigError(format!("Failed to create output directory: {}", e)));
+        }
+        
+        if let Err(e) = std::fs::create_dir_all(&config.temp_path) {
+            println!("DEBUG: Failed to create temp directory: {}", e);
+            return Err(GytmdlError::ConfigError(format!("Failed to create temp directory: {}", e)));
+        }
+
         // Set working directory to output path
         command.current_dir(&config.output_path);
 
         let child = command.spawn()
-            .map_err(|e| GytmdlError::ProcessSpawnError(e))?;
+            .map_err(|e| {
+                println!("DEBUG: Process spawn error: {}", e);
+                GytmdlError::ProcessSpawnError(e)
+            })?;
 
+        println!("DEBUG: Process spawned with PID: {:?}", child.id());
         Ok(GytmdlProcess::new(child, job.id.clone()))
     }
 

@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" 
+             Name="gytmdl GUI" 
+             Language="1033" 
+             Version="{{version}}" 
+             Manufacturer="gytmdl-gui contributors" 
+             UpgradeCode="{{upgrade_code}}">
+        
+        <Package InstallerVersion="200" 
+                 Compressed="yes" 
+                 InstallScope="perMachine" 
+                 Description="YouTube Music downloader with GUI"
+                 Comments="Cross-platform GUI for gytmdl" />
+
+        <!-- Major upgrade configuration -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of gytmdl GUI is already installed." />
+        
+        <!-- Media and source -->
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Feature definition -->
+        <Feature Id="ProductFeature" Title="gytmdl GUI" Level="1">
+            <ComponentGroupRef Id="ApplicationFiles" />
+            <ComponentRef Id="ApplicationShortcut" />
+            <ComponentRef Id="DesktopShortcut" />
+        </Feature>
+
+        <!-- Directory structure -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="gytmdl GUI" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="gytmdl GUI" />
+            </Directory>
+            <Directory Id="DesktopFolder" Name="Desktop" />
+        </Directory>
+
+        <!-- Application files component group -->
+        <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+            {{#each binaries}}
+            <Component Id="{{id}}" Guid="*">
+                <File Id="{{id}}" Source="{{source}}" KeyPath="yes" />
+            </Component>
+            {{/each}}
+            
+            <!-- Sidecar binaries -->
+            <Component Id="SidecarBinaries" Guid="*">
+                <File Id="GytmdlBinary" Source="sidecars\gytmdl-x86_64-pc-windows-msvc.exe" KeyPath="yes" />
+                <File Id="GytmdlManifest" Source="sidecars\gytmdl-x86_64-pc-windows-msvc.json" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Start menu shortcut -->
+        <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder" Guid="*">
+            <Shortcut Id="ApplicationStartMenuShortcut"
+                      Name="gytmdl GUI"
+                      Description="YouTube Music downloader with GUI"
+                      Target="[INSTALLFOLDER]gytmdl-gui.exe"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon" />
+            <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+            <RegistryValue Root="HKCU" 
+                          Key="Software\gytmdl-gui" 
+                          Name="installed" 
+                          Type="integer" 
+                          Value="1" 
+                          KeyPath="yes" />
+        </Component>
+
+        <!-- Desktop shortcut -->
+        <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="*">
+            <Shortcut Id="ApplicationDesktopShortcut"
+                      Name="gytmdl GUI"
+                      Description="YouTube Music downloader with GUI"
+                      Target="[INSTALLFOLDER]gytmdl-gui.exe"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon" />
+            <RegistryValue Root="HKCU" 
+                          Key="Software\gytmdl-gui" 
+                          Name="desktop_shortcut" 
+                          Type="integer" 
+                          Value="1" 
+                          KeyPath="yes" />
+        </Component>
+
+        <!-- Application icon -->
+        <Icon Id="AppIcon" SourceFile="icons\icon.ico" />
+
+        <!-- Registry entries for uninstall information -->
+        <Component Id="RegistryEntries" Directory="INSTALLFOLDER" Guid="*">
+            <RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\gytmdl-gui">
+                <RegistryValue Name="DisplayName" Type="string" Value="gytmdl GUI" />
+                <RegistryValue Name="DisplayVersion" Type="string" Value="{{version}}" />
+                <RegistryValue Name="Publisher" Type="string" Value="gytmdl-gui contributors" />
+                <RegistryValue Name="InstallLocation" Type="string" Value="[INSTALLFOLDER]" />
+                <RegistryValue Name="DisplayIcon" Type="string" Value="[INSTALLFOLDER]gytmdl-gui.exe" />
+                <RegistryValue Name="UninstallString" Type="string" Value="msiexec /x {{product_code}}" />
+                <RegistryValue Name="NoModify" Type="integer" Value="1" />
+                <RegistryValue Name="NoRepair" Type="integer" Value="1" />
+                <RegistryValue Name="EstimatedSize" Type="integer" Value="50000" />
+            </RegistryKey>
+            <RegistryValue Root="HKCU" 
+                          Key="Software\gytmdl-gui" 
+                          Name="registry_entries" 
+                          Type="integer" 
+                          Value="1" 
+                          KeyPath="yes" />
+        </Component>
+
+        <!-- URL protocol registration for handling YouTube Music links -->
+        <Component Id="URLProtocol" Directory="INSTALLFOLDER" Guid="*">
+            <RegistryKey Root="HKCR" Key="gytmdl">
+                <RegistryValue Type="string" Value="URL:gytmdl Protocol" />
+                <RegistryValue Name="URL Protocol" Type="string" Value="" />
+                <RegistryKey Key="DefaultIcon">
+                    <RegistryValue Type="string" Value="[INSTALLFOLDER]gytmdl-gui.exe,0" />
+                </RegistryKey>
+                <RegistryKey Key="shell\open\command">
+                    <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]gytmdl-gui.exe&quot; &quot;%1&quot;" />
+                </RegistryKey>
+            </RegistryKey>
+            <RegistryValue Root="HKCU" 
+                          Key="Software\gytmdl-gui" 
+                          Name="url_protocol" 
+                          Type="integer" 
+                          Value="1" 
+                          KeyPath="yes" />
+        </Component>
+
+        <!-- Add components to feature -->
+        <Feature Id="ProductFeature" Title="gytmdl GUI" Level="1">
+            <ComponentGroupRef Id="ApplicationFiles" />
+            <ComponentRef Id="ApplicationShortcut" />
+            <ComponentRef Id="DesktopShortcut" />
+            <ComponentRef Id="RegistryEntries" />
+            <ComponentRef Id="URLProtocol" />
+        </Feature>
+
+        <!-- UI configuration -->
+        <UI>
+            <UIRef Id="WixUI_InstallDir" />
+            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">1</Publish>
+            <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2">1</Publish>
+        </UI>
+
+        <!-- License agreement -->
+        <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+        
+        <!-- Custom actions for cleanup -->
+        <CustomAction Id="CleanupUserData" 
+                      BinaryKey="WixCA" 
+                      DllEntry="WixQuietExec" 
+                      Execute="deferred" 
+                      Return="ignore" 
+                      Impersonate="no" />
+
+    </Product>
+</Wix>

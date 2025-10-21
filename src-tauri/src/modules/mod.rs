@@ -4,3 +4,7 @@ pub mod gytmdl_wrapper;
 pub mod progress_parser;
 pub mod config_manager;
 pub mod cookie_manager;
+pub mod sidecar_manager;
+
+#[cfg(test)]
+pub mod tests;
