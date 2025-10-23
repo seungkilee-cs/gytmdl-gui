@@ -1,235 +1,185 @@
 # Testing gytmdl-gui
 
-This guide explains how to test the gytmdl-gui application to ensure everything works correctly.
+This document provides simple instructions for testing the gytmdl-gui application locally.
 
-## Prerequisites
+## Quick Start
 
-Before testing, make sure you have:
+### Option 1: Complete Automated Test (Recommended)
 
-1. **Node.js** (v18 or later) and **npm**
-2. **Rust** and **Cargo** (latest stable)
-3. **Python 3.7+** with **pip**
-4. **gytmdl** source code (should be in `../gytmdl` relative to this project)
-
-## Quick Start Testing
-
-### 1. Install Dependencies
+Run the comprehensive test script that handles everything:
 
 ```bash
-# Install frontend dependencies
-npm install
-
-# Install Tauri CLI (if not already installed)
-npm install -g @tauri-apps/cli
-
-# Install Python dependencies for sidecar building
-pip install pyinstaller
-```
-
-### 2. Build Sidecar Binaries (Optional)
-
-If you want to test with actual gytmdl binaries:
-
-```bash
-# Make sure gytmdl source is available
-ls ../gytmdl  # Should show gytmdl source files
-
-# Build sidecar binaries for current platform
-./build-scripts/build-all-platforms.sh  # On Unix
-# OR
-build-scripts\build-all-platforms.bat   # On Windows
-```
-
-### 3. Run the Application in Development Mode
-
-```bash
-npm run tauri dev
+python3 scripts/test-and-build.py
 ```
 
 This will:
-- Build the frontend
-- Start the Rust backend
-- Open the application window
+- ✅ Check all dependencies
+- ✅ Build sidecar binary for your platform
+- ✅ Build the frontend
+- ✅ Build the Tauri application
+- ✅ Create platform-specific installers
+- ✅ Test the installers
 
-### 4. Test Basic Functionality
+### Option 2: Step-by-Step Testing
 
-Once the app opens:
-
-1. **Test URL Addition:**
-   - Paste a YouTube Music URL (e.g., `https://music.youtube.com/watch?v=dQw4w9WgXcQ`)
-   - Click "Add" button
-   - The URL should appear in the queue
-
-2. **Test Queue Management:**
-   - Try pausing/resuming the queue
-   - Test removing jobs
-   - Test clearing completed jobs
-
-3. **Test Configuration:**
-   - Click on "Config" tab
-   - Modify settings like output path, audio quality
-   - Save configuration
-
-4. **Test Cookie Management:**
-   - Click on "Cookies" tab
-   - Test cookie import functionality
-
-## Testing Without gytmdl Binary
-
-If you don't have gytmdl binaries built, the app will still work but downloads won't actually process. You can test:
-
-- UI functionality
-- Queue management
-- Configuration saving/loading
-- Cookie management interface
-
-The app will show appropriate error messages when trying to download without a valid gytmdl binary.
-
-## Running Tests
-
-### Frontend Tests
+If you prefer more control:
 
 ```bash
-# Run frontend unit tests (if any)
-npm test
+# 1. Test isolation system
+python3 scripts/test-isolation.py
+
+# 2. Build sidecar binary only
+python3 scripts/build-simple-sidecar.py
+
+# 3. Build everything
+./scripts/quick-test.sh
 ```
 
-### Backend Tests
+### Option 3: Manual Build
+
+For complete manual control:
 
 ```bash
-# Run Rust tests
-cd src-tauri
-cargo test
+# Install PyInstaller
+pip install pyinstaller
+
+# Install gytmdl in development mode
+pip install -e ../gytmdl
+
+# Build sidecar binary manually
+python3 -m PyInstaller --onefile --console --name gytmdl-aarch64-apple-darwin --distpath src-tauri/sidecars /tmp/entry.py
+
+# Build frontend
+npm install
+npm run build
+
+# Build Tauri app
+cargo tauri build
 ```
 
-### Integration Tests
+## What Gets Built
 
-```bash
-# Run packaging tests
-python scripts/test-packaging.py
+After successful building, you'll find installers in:
+
+### macOS
+- `target/release/bundle/dmg/*.dmg` - DMG installer
+
+### Linux  
+- `target/release/bundle/deb/*.deb` - DEB package
+- `target/release/bundle/appimage/*.AppImage` - AppImage
+
+### Windows
+- `target/release/bundle/msi/*.msi` - MSI installer
+
+## Testing as End User
+
+### Install and Test
+
+1. **Install the appropriate package for your platform**
+2. **Launch the application**
+3. **Test basic functionality**:
+   - Add a YouTube Music URL
+   - Configure download settings
+   - Start a download
+   - Verify files are saved correctly
+
+### Test URLs
+
+Try these test URLs to verify functionality:
+
+```
+# Single track
+https://music.youtube.com/watch?v=dQw4w9WgXcQ
+
+# Album  
+https://music.youtube.com/playlist?list=OLAK5uy_l1x-JAx0w53suECoCI0YJtW6VB8DBQWRQ
+
+# Playlist
+https://music.youtube.com/playlist?list=PLrAl6rYgs4IvGFBDEaVGFXt6K2cqfzgKN
 ```
 
-## Building for Production
+## Configuration Isolation
 
-### Development Build
+The GUI app is completely isolated from system gytmdl installations:
 
+### Separate Directories
+- **System gytmdl**: `~/.config/gytmdl/`
+- **GUI app**: `~/.config/gytmdl-gui/`
+
+### Test Isolation
 ```bash
-# Quick development build
-./scripts/dev-build.sh
+# Test that both can coexist
+python3 scripts/test-isolation.py
 ```
 
-### Full Production Build
+This verifies:
+- ✅ GUI app uses its own directories
+- ✅ System gytmdl (if installed) is unaffected
+- ✅ Environment variables are properly isolated
+- ✅ No configuration conflicts
 
+## Troubleshooting
+
+### Common Issues
+
+**Sidecar build fails**:
 ```bash
-# Build everything including sidecars and installers
-python scripts/build-and-package.py
+# Check if gytmdl source exists
+ls -la ../gytmdl
+
+# Install PyInstaller
+pip install pyinstaller
+
+# Install gytmdl dependencies
+pip install -e ../gytmdl
 ```
 
-## Common Issues and Solutions
-
-### 1. "Binary not found" Error
-
-**Problem:** The app can't find the gytmdl binary.
-
-**Solution:**
-- Build sidecar binaries using the build scripts
-- Or place a gytmdl binary in `src-tauri/sidecars/`
-- Or install gytmdl in your system PATH
-
-### 2. "Failed to add URL" Error
-
-**Problem:** URL validation or backend communication issue.
-
-**Solution:**
-- Make sure the URL is a valid YouTube Music URL
-- Check the browser console for detailed error messages
-- Verify the Rust backend is running
-
-### 3. Frontend Build Errors
-
-**Problem:** npm build fails.
-
-**Solution:**
+**Frontend build fails**:
 ```bash
-# Clear cache and reinstall
+# Check Node.js version (should be 18+)
+node --version
+
+# Clean and reinstall
 rm -rf node_modules package-lock.json
 npm install
 ```
 
-### 4. Rust Compilation Errors
-
-**Problem:** Cargo build fails.
-
-**Solution:**
+**Tauri build fails**:
 ```bash
-# Update Rust and dependencies
+# Check Rust version
+cargo --version
+
+# Update Rust
 rustup update
-cd src-tauri
-cargo update
+
+# Clean build
 cargo clean
-cargo build
 ```
 
-## Testing Checklist
+### Getting Help
 
-Use this checklist to verify all functionality:
+1. **Check the logs** in the terminal output
+2. **Run individual test scripts** to isolate issues
+3. **Verify all dependencies** are installed correctly
+4. **Check the detailed guides** in `docs/` directory
 
-- [ ] App starts without errors
-- [ ] Can add YouTube Music URLs to queue
-- [ ] Queue displays jobs correctly
-- [ ] Can pause/resume queue
-- [ ] Can remove individual jobs
-- [ ] Can clear completed jobs
-- [ ] Configuration tab loads
-- [ ] Can modify and save configuration
-- [ ] Cookie management tab loads
-- [ ] Can import cookie files
-- [ ] No console errors in browser dev tools
-- [ ] App responds to window resize
-- [ ] All navigation tabs work
+## Advanced Testing
 
-## Performance Testing
+For more comprehensive testing, see:
+- `docs/testing-guide.md` - Detailed testing procedures
+- `docs/testing-and-isolation-guide.md` - Isolation system details
+- `scripts/test-local-build.py` - Advanced local testing
+- `scripts/validate-release-pipeline.py` - Pipeline validation
 
-For performance testing:
+## Success Criteria
 
-1. Add multiple URLs (10-20) to the queue
-2. Monitor memory usage
-3. Check for memory leaks during long runs
-4. Test with large playlists
+A successful test should result in:
+- ✅ Sidecar binary builds without errors
+- ✅ Frontend compiles successfully  
+- ✅ Tauri app builds and creates installers
+- ✅ Installers can be opened/installed
+- ✅ App launches and basic functionality works
+- ✅ Downloads complete successfully
+- ✅ No interference with system gytmdl (if installed)
 
-## Platform-Specific Testing
-
-### Windows
-- Test with Windows Defender enabled
-- Verify installer works correctly
-- Test with different user permissions
-
-### macOS
-- Test on both Intel and Apple Silicon Macs
-- Verify app bundle is properly signed
-- Test Gatekeeper compatibility
-
-### Linux
-- Test on different distributions (Ubuntu, Fedora, etc.)
-- Verify .deb and .rpm packages install correctly
-- Test with different desktop environments
-
-## Reporting Issues
-
-When reporting issues, include:
-
-1. Operating system and version
-2. Node.js and Rust versions
-3. Steps to reproduce the issue
-4. Console output and error messages
-5. Screenshots if applicable
-
-## Automated Testing
-
-The project includes GitHub Actions workflows for automated testing:
-
-- **Build Tests:** Verify the app builds on all platforms
-- **Integration Tests:** Test packaging and distribution
-- **Release Tests:** Verify installers work correctly
-
-Check the `.github/workflows/` directory for workflow definitions.
+Once these criteria are met, the application is ready for distribution!

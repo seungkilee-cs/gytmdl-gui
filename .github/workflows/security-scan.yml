@@ -1,0 +1,370 @@
+name: Security Scan
+
+on:
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install npm dependencies
+        run: |
+          cd gytmdl-gui
+          npm ci
+
+      - name: Run npm audit
+        run: |
+          cd gytmdl-gui
+          npm audit --audit-level moderate --json > npm-audit.json || true
+          
+          # Check if there are any vulnerabilities
+          if [ -s npm-audit.json ]; then
+            vulnerabilities=$(cat npm-audit.json | jq -r '.metadata.vulnerabilities.total // 0')
+            if [ "$vulnerabilities" -gt 0 ]; then
+              echo "::warning::Found $vulnerabilities npm vulnerabilities"
+              cat npm-audit.json | jq -r '.advisories // {} | to_entries[] | "- \(.value.title) (\(.value.severity)): \(.value.overview)"'
+            else
+              echo "No npm vulnerabilities found"
+            fi
+          fi
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo audit --json > cargo-audit.json || true
+          
+          # Check if there are any vulnerabilities
+          if [ -s cargo-audit.json ]; then
+            vulnerabilities=$(cat cargo-audit.json | jq -r '.vulnerabilities.count // 0')
+            if [ "$vulnerabilities" -gt 0 ]; then
+              echo "::warning::Found $vulnerabilities cargo vulnerabilities"
+              cat cargo-audit.json | jq -r '.vulnerabilities.list[]? | "- \(.advisory.title) (\(.advisory.severity)): \(.advisory.description)"'
+            else
+              echo "No cargo vulnerabilities found"
+            fi
+          fi
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            gytmdl-gui/npm-audit.json
+            gytmdl-gui/src-tauri/cargo-audit.json
+          retention-days: 30
+
+  code-scan:
+    name: Code Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript, rust
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build frontend
+        run: |
+          cd gytmdl-gui
+          npm ci
+          npm run build
+
+      - name: Build Rust backend
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo build --release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript,rust"
+
+  license-scan:
+    name: License Compliance Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install license checker
+        run: npm install -g license-checker
+
+      - name: Check npm licenses
+        run: |
+          cd gytmdl-gui
+          npm ci
+          license-checker --json --out npm-licenses.json
+          
+          # Check for problematic licenses
+          problematic_licenses=("GPL-3.0" "AGPL-3.0" "LGPL-3.0")
+          for license in "${problematic_licenses[@]}"; do
+            if grep -q "$license" npm-licenses.json; then
+              echo "::warning::Found potentially problematic license: $license"
+              grep -B2 -A2 "$license" npm-licenses.json
+            fi
+          done
+
+      - name: Install cargo-license
+        run: cargo install cargo-license
+
+      - name: Check Rust licenses
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo license --json > cargo-licenses.json
+          
+          # Check for problematic licenses
+          problematic_licenses=("GPL-3.0" "AGPL-3.0" "LGPL-3.0")
+          for license in "${problematic_licenses[@]}"; do
+            if grep -q "$license" cargo-licenses.json; then
+              echo "::warning::Found potentially problematic license: $license"
+              grep -B2 -A2 "$license" cargo-licenses.json
+            fi
+          done
+
+      - name: Upload license scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-scan-results
+          path: |
+            gytmdl-gui/npm-licenses.json
+            gytmdl-gui/src-tauri/cargo-licenses.json
+          retention-days: 30
+
+  supply-chain-scan:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install safety
+        run: pip install safety
+
+      - name: Check gytmdl dependencies
+        run: |
+          # Create a temporary requirements file for gytmdl
+          echo "gytmdl" > temp-requirements.txt
+          
+          # Check for known vulnerabilities
+          safety check -r temp-requirements.txt --json > gytmdl-safety.json || true
+          
+          if [ -s gytmdl-safety.json ]; then
+            vulnerabilities=$(cat gytmdl-safety.json | jq -r 'length')
+            if [ "$vulnerabilities" -gt 0 ]; then
+              echo "::warning::Found $vulnerabilities vulnerabilities in gytmdl dependencies"
+              cat gytmdl-safety.json | jq -r '.[] | "- \(.advisory): \(.vulnerability_id)"'
+            else
+              echo "No vulnerabilities found in gytmdl dependencies"
+            fi
+          fi
+
+      - name: Upload supply chain scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: supply-chain-scan-results
+          path: gytmdl-safety.json
+          retention-days: 30
+
+  create-security-report:
+    name: Create Security Report
+    needs: [dependency-scan, license-scan, supply-chain-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all scan results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-scan-results"
+          path: scan-results/
+          merge-multiple: true
+
+      - name: Generate security report
+        run: |
+          cat > security-report.md << 'EOF'
+          # Security Scan Report
+          
+          Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Commit: ${{ github.sha }}
+          
+          ## Summary
+          
+          This report contains the results of automated security scans performed on the gytmdl-gui project.
+          
+          ## Dependency Vulnerabilities
+          
+          ### NPM Dependencies
+          EOF
+          
+          if [ -f scan-results/npm-audit.json ]; then
+            npm_vulns=$(cat scan-results/npm-audit.json | jq -r '.metadata.vulnerabilities.total // 0')
+            echo "- Total vulnerabilities: $npm_vulns" >> security-report.md
+            if [ "$npm_vulns" -gt 0 ]; then
+              echo "" >> security-report.md
+              cat scan-results/npm-audit.json | jq -r '.advisories // {} | to_entries[] | "- **\(.value.title)** (\(.value.severity)): \(.value.overview)"' >> security-report.md
+            fi
+          else
+            echo "- No scan results available" >> security-report.md
+          fi
+          
+          cat >> security-report.md << 'EOF'
+          
+          ### Rust Dependencies
+          EOF
+          
+          if [ -f scan-results/cargo-audit.json ]; then
+            cargo_vulns=$(cat scan-results/cargo-audit.json | jq -r '.vulnerabilities.count // 0')
+            echo "- Total vulnerabilities: $cargo_vulns" >> security-report.md
+            if [ "$cargo_vulns" -gt 0 ]; then
+              echo "" >> security-report.md
+              cat scan-results/cargo-audit.json | jq -r '.vulnerabilities.list[]? | "- **\(.advisory.title)** (\(.advisory.severity)): \(.advisory.description)"' >> security-report.md
+            fi
+          else
+            echo "- No scan results available" >> security-report.md
+          fi
+          
+          cat >> security-report.md << 'EOF'
+          
+          ## License Compliance
+          
+          ### Potentially Problematic Licenses
+          EOF
+          
+          # Check for problematic licenses in results
+          problematic_found=false
+          if [ -f scan-results/npm-licenses.json ]; then
+            if grep -q "GPL-3.0\|AGPL-3.0\|LGPL-3.0" scan-results/npm-licenses.json; then
+              echo "- Found problematic licenses in NPM dependencies" >> security-report.md
+              problematic_found=true
+            fi
+          fi
+          
+          if [ -f scan-results/cargo-licenses.json ]; then
+            if grep -q "GPL-3.0\|AGPL-3.0\|LGPL-3.0" scan-results/cargo-licenses.json; then
+              echo "- Found problematic licenses in Rust dependencies" >> security-report.md
+              problematic_found=true
+            fi
+          fi
+          
+          if [ "$problematic_found" = false ]; then
+            echo "- No problematic licenses detected" >> security-report.md
+          fi
+          
+          cat >> security-report.md << 'EOF'
+          
+          ## Supply Chain Security
+          EOF
+          
+          if [ -f scan-results/gytmdl-safety.json ]; then
+            supply_vulns=$(cat scan-results/gytmdl-safety.json | jq -r 'length // 0')
+            echo "- gytmdl dependency vulnerabilities: $supply_vulns" >> security-report.md
+            if [ "$supply_vulns" -gt 0 ]; then
+              echo "" >> security-report.md
+              cat scan-results/gytmdl-safety.json | jq -r '.[] | "- **\(.advisory)**: \(.vulnerability_id)"' >> security-report.md
+            fi
+          else
+            echo "- No supply chain scan results available" >> security-report.md
+          fi
+          
+          cat >> security-report.md << 'EOF'
+          
+          ## Recommendations
+          
+          1. Review and address any high or critical severity vulnerabilities
+          2. Update dependencies regularly to get security patches
+          3. Monitor security advisories for used dependencies
+          4. Consider using dependency pinning for production builds
+          5. Regularly audit third-party dependencies
+          
+          ---
+          *This report was generated automatically by the security scan workflow.*
+          EOF
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 90
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('security-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔒 Security Scan Results\n\n${report}`
+            });

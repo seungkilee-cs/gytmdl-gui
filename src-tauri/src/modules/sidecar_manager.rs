@@ -1,5 +1,5 @@
-use crate::modules::gytmdl_wrapper::{GytmdlWrapper, GytmdlError, BinaryManifest};
-use std::path::PathBuf;
+use crate::modules::gytmdl_wrapper::{GytmdlWrapper, BinaryManifest};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

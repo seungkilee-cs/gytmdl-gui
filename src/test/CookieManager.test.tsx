@@ -1,6 +1,6 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import CookieManager from '../components/CookieManager';
 
 const mockCookieStatus = {
@@ -16,7 +16,7 @@ const mockConfig = {
 
 describe('CookieManager Component', () => {
   beforeEach(() => {
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_cookie_status') {
         return Promise.resolve(mockCookieStatus);
       }
@@ -64,7 +64,7 @@ describe('CookieManager Component', () => {
   });
 
   it('displays invalid cookie status', async () => {
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_cookie_status') {
         return Promise.resolve({
           isValid: false,
@@ -113,7 +113,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     await user.upload(fileInput, file);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('import_cookies', {
+      expect(mockInvoke).toHaveBeenCalledWith('import_cookies', {
         cookieContent: cookieContent,
       });
     });
@@ -166,7 +166,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     
     // The component should show an error for non-txt files
     // Since the actual implementation may vary, let's just check that the file wasn't processed
-    expect((global as any).mockInvoke).not.toHaveBeenCalledWith('import_cookies');
+    expect(mockInvoke).not.toHaveBeenCalledWith('import_cookies');
   });
 
   it('handles cookie validation', async () => {
@@ -182,7 +182,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     await user.click(validateButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('validate_cookies');
+      expect(mockInvoke).toHaveBeenCalledWith('validate_cookies');
     });
     
     await waitFor(() => {
@@ -191,7 +191,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
   });
 
   it('handles failed cookie validation', async () => {
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_cookie_status') {
         return Promise.resolve(mockCookieStatus);
       }
@@ -237,7 +237,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     await user.click(saveTokenButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('update_po_token', {
+      expect(mockInvoke).toHaveBeenCalledWith('update_po_token', {
         poToken: 'new_po_token',
       });
     });
@@ -265,7 +265,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     );
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('clear_cookies');
+      expect(mockInvoke).toHaveBeenCalledWith('clear_cookies');
     });
     
     // Restore original confirm
@@ -290,7 +290,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
     await user.click(clearButton);
     
     expect(window.confirm).toHaveBeenCalled();
-    expect((global as any).mockInvoke).not.toHaveBeenCalledWith('clear_cookies');
+    expect(mockInvoke).not.toHaveBeenCalledWith('clear_cookies');
     
     // Restore original confirm
     window.confirm = originalConfirm;
@@ -339,7 +339,7 @@ music.youtube.com	TRUE	/	FALSE	1735689599	test_cookie	test_value`;
 
   it('displays expiration warning when cookies are close to expiring', async () => {
     // Mock cookies that expire soon
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_cookie_status') {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);

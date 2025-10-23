@@ -45,11 +45,12 @@ elif sys.platform.startswith("linux"):
 binary_name = f"gytmdl{platform_suffix}"
 
 a = Analysis(
-    [os.path.join(gytmdl_src, "gytmdl", "__main__.py")],
-    pathex=[gytmdl_src],
+    [os.path.join(spec_dir, "gytmdl_entry.py")],
+    pathex=[gytmdl_src, spec_dir],
     binaries=[],
     datas=[
         # Include any data files that gytmdl might need
+        (os.path.join(gytmdl_src, "gytmdl"), "gytmdl"),
     ],
     hiddenimports=[
         # Add any hidden imports that gytmdl might need
@@ -60,6 +61,28 @@ a = Analysis(
         'gytmdl.enums',
         'gytmdl.constants',
         'gytmdl.custom_logger_formatter',
+        'gytmdl.models',
+        'gytmdl.exceptions',
+        # Common dependencies
+        'requests',
+        'urllib3',
+        'certifi',
+        'charset_normalizer',
+        'idna',
+        # Audio processing
+        'mutagen',
+        # Other potential dependencies
+        'json',
+        'base64',
+        'hashlib',
+        'uuid',
+        'datetime',
+        'pathlib',
+        'argparse',
+        'logging',
+        'concurrent.futures',
+        'threading',
+        'queue',
     ],
     hookspath=[],
     hooksconfig={},

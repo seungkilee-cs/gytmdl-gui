@@ -150,7 +150,7 @@ class SidecarBuilder:
         print(f"Building binary for {platform_info['os']} {platform_info['arch']}...")
         
         try:
-            # Run PyInstaller with just the spec file
+            # Run PyInstaller from the build-scripts directory
             cmd = [
                 "pyinstaller",
                 "--clean",
@@ -158,7 +158,8 @@ class SidecarBuilder:
             ]
             
             print(f"Running: {' '.join(cmd)}")
-            result = subprocess.run(cmd, cwd=self.gytmdl_src, capture_output=True, text=True)
+            # Run from the build-scripts directory, not gytmdl source
+            result = subprocess.run(cmd, cwd=self.spec_file.parent, capture_output=True, text=True)
             
             if result.returncode != 0:
                 print(f"✗ PyInstaller failed:")
@@ -167,7 +168,7 @@ class SidecarBuilder:
                 return None
             
             # Find the generated binary in PyInstaller's dist directory
-            pyinstaller_dist = self.gytmdl_src / "dist"
+            pyinstaller_dist = self.spec_file.parent / "dist"
             expected_binary = self.output_dir / binary_name
             
             # PyInstaller creates the binary in its own dist directory

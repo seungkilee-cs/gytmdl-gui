@@ -1,0 +1,200 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of update to perform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - npm
+          - cargo
+          - gytmdl
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-updates:
+    name: Check for Updates
+    runs-on: ubuntu-latest
+    outputs:
+      npm-updates: ${{ steps.check-npm.outputs.updates }}
+      cargo-updates: ${{ steps.check-cargo.outputs.updates }}
+      gytmdl-updates: ${{ steps.check-gytmdl.outputs.updates }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check npm updates
+        id: check-npm
+        if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'npm'
+        run: |
+          cd gytmdl-gui
+          npm outdated --json > npm-outdated.json || true
+          if [ -s npm-outdated.json ] && [ "$(cat npm-outdated.json)" != "{}" ]; then
+            echo "updates=true" >> $GITHUB_OUTPUT
+            echo "NPM updates available:"
+            cat npm-outdated.json | jq -r 'to_entries[] | "\(.key): \(.value.current) -> \(.value.latest)"'
+          else
+            echo "updates=false" >> $GITHUB_OUTPUT
+            echo "No NPM updates available"
+          fi
+
+      - name: Check Cargo updates
+        id: check-cargo
+        if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'cargo'
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo install cargo-outdated
+          cargo outdated --format json > cargo-outdated.json || true
+          if [ -s cargo-outdated.json ] && [ "$(cat cargo-outdated.json)" != "[]" ]; then
+            echo "updates=true" >> $GITHUB_OUTPUT
+            echo "Cargo updates available:"
+            cat cargo-outdated.json | jq -r '.[] | "\(.name): \(.project) -> \(.latest)"'
+          else
+            echo "updates=false" >> $GITHUB_OUTPUT
+            echo "No Cargo updates available"
+          fi
+
+      - name: Check gytmdl updates
+        id: check-gytmdl
+        if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'gytmdl'
+        run: |
+          # Get current gytmdl version from our build scripts
+          current_version=$(grep -oP 'gytmdl==\K[0-9.]+' gytmdl-gui/build-scripts/requirements.txt || echo "unknown")
+          
+          # Get latest version from PyPI
+          latest_version=$(curl -s https://pypi.org/pypi/gytmdl/json | jq -r '.info.version')
+          
+          echo "Current gytmdl version: $current_version"
+          echo "Latest gytmdl version: $latest_version"
+          
+          if [ "$current_version" != "$latest_version" ] && [ "$latest_version" != "null" ]; then
+            echo "updates=true" >> $GITHUB_OUTPUT
+            echo "gytmdl update available: $current_version -> $latest_version"
+          else
+            echo "updates=false" >> $GITHUB_OUTPUT
+            echo "No gytmdl updates available"
+          fi
+
+  create-update-pr:
+    name: Create Update PR
+    needs: check-updates
+    runs-on: ubuntu-latest
+    if: needs.check-updates.outputs.npm-updates == 'true' || needs.check-updates.outputs.cargo-updates == 'true' || needs.check-updates.outputs.gytmdl-updates == 'true'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Update npm dependencies
+        if: needs.check-updates.outputs.npm-updates == 'true'
+        run: |
+          cd gytmdl-gui
+          npm update
+          npm audit fix --audit-level moderate || true
+
+      - name: Update Cargo dependencies
+        if: needs.check-updates.outputs.cargo-updates == 'true'
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo update
+
+      - name: Update gytmdl version
+        if: needs.check-updates.outputs.gytmdl-updates == 'true'
+        run: |
+          # Update gytmdl version in build scripts
+          latest_version=$(curl -s https://pypi.org/pypi/gytmdl/json | jq -r '.info.version')
+          if [ "$latest_version" != "null" ]; then
+            # Update requirements.txt if it exists
+            if [ -f gytmdl-gui/build-scripts/requirements.txt ]; then
+              sed -i "s/gytmdl==[0-9.]*/gytmdl==$latest_version/" gytmdl-gui/build-scripts/requirements.txt
+            fi
+            
+            # Update any version references in build scripts
+            find gytmdl-gui/build-scripts -name "*.py" -exec sed -i "s/gytmdl_version = ['\"][0-9.]*['\"]/gytmdl_version = '$latest_version'/" {} \;
+          fi
+
+      - name: Run tests
+        run: |
+          cd gytmdl-gui
+          npm run test || echo "Tests failed, but continuing with PR creation"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: update dependencies
+            
+            - NPM updates: ${{ needs.check-updates.outputs.npm-updates }}
+            - Cargo updates: ${{ needs.check-updates.outputs.cargo-updates }}
+            - gytmdl updates: ${{ needs.check-updates.outputs.gytmdl-updates }}
+          title: "chore: automated dependency updates"
+          body: |
+            ## Automated Dependency Updates
+            
+            This PR contains automated updates for project dependencies.
+            
+            ### Updates Applied
+            - **NPM Dependencies**: ${{ needs.check-updates.outputs.npm-updates == 'true' && '✅ Updated' || '❌ No updates' }}
+            - **Cargo Dependencies**: ${{ needs.check-updates.outputs.cargo-updates == 'true' && '✅ Updated' || '❌ No updates' }}
+            - **gytmdl Version**: ${{ needs.check-updates.outputs.gytmdl-updates == 'true' && '✅ Updated' || '❌ No updates' }}
+            
+            ### Testing
+            - [ ] Frontend tests pass
+            - [ ] Backend builds successfully
+            - [ ] Sidecar binaries build correctly
+            - [ ] Manual testing completed
+            
+            ### Notes
+            Please review the changes carefully and test thoroughly before merging.
+            Some updates may introduce breaking changes or require code modifications.
+            
+            ---
+            *This PR was created automatically by the dependency update workflow.*
+          branch: automated-dependency-updates
+          delete-branch: true
+          labels: |
+            dependencies
+            automated

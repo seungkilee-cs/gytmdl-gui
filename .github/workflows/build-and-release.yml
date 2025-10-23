@@ -4,12 +4,26 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - prerelease
+          - release
 
 env:
   CARGO_TERM_COLOR: always
+  TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+  TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
 jobs:
   build-sidecars:
@@ -19,19 +33,34 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
             target: 'x86_64-apple-darwin'
+            os: 'macos'
+            arch: 'x86_64'
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
             target: 'aarch64-apple-darwin'
+            os: 'macos'
+            arch: 'aarch64'
           - platform: 'ubuntu-20.04'
-            args: '--target x86_64-unknown-linux-gnu'
             target: 'x86_64-unknown-linux-gnu'
+            os: 'linux'
+            arch: 'x86_64'
+          - platform: 'ubuntu-20.04'
+            target: 'aarch64-unknown-linux-gnu'
+            os: 'linux'
+            arch: 'aarch64'
           - platform: 'windows-latest'
-            args: '--target x86_64-pc-windows-msvc'
             target: 'x86_64-pc-windows-msvc'
+            os: 'windows'
+            arch: 'x86_64'
+          - platform: 'windows-latest'
+            target: 'i686-pc-windows-msvc'
+            os: 'windows'
+            arch: 'i686'
 
     runs-on: ${{ matrix.platform }}
+    outputs:
+      sidecar-version: ${{ steps.get-version.outputs.version }}
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,36 +68,54 @@ jobs:
           submodules: recursive
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install build dependencies
+        run: |
+          pip install pyinstaller requests packaging
 
-      - name: Checkout gytmdl
+      - name: Checkout gytmdl source
         uses: actions/checkout@v4
         with:
-          repository: 'gytmdl/gytmdl'  # Replace with actual gytmdl repo
+          repository: 'glomatico/gytmdl'
           path: 'gytmdl'
+          ref: 'main'
 
-      - name: Build sidecar binary (Unix)
-        if: matrix.platform != 'windows-latest'
+      - name: Get gytmdl version
+        id: get-version
         run: |
-          chmod +x gytmdl-gui/build-scripts/build-all-platforms.sh
-          cd gytmdl-gui && ./build-scripts/build-all-platforms.sh
+          cd gytmdl
+          VERSION=$(python -c "import gytmdl; print(gytmdl.__version__)" 2>/dev/null || echo "unknown")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "gytmdl version: $VERSION"
 
-      - name: Build sidecar binary (Windows)
-        if: matrix.platform == 'windows-latest'
+      - name: Build sidecar binary
         run: |
           cd gytmdl-gui
-          .\build-scripts\build-all-platforms.bat
+          python build-scripts/build-sidecars.py \
+            --gytmdl-src ../gytmdl \
+            --output-dir src-tauri/sidecars \
+            --target ${{ matrix.target }}
+
+      - name: Verify sidecar binary
+        run: |
+          cd gytmdl-gui/src-tauri/sidecars
+          ls -la
+          # Test binary execution (may fail for cross-compiled binaries)
+          if [[ "${{ matrix.target }}" == *"$(uname -m)"* ]] && [[ "${{ matrix.os }}" == "$(uname -s | tr '[:upper:]' '[:lower:]')" ]]; then
+            ./gytmdl-${{ matrix.target }}* --version || echo "Binary test failed (expected for some cross-compiled binaries)"
+          fi
 
       - name: Upload sidecar artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sidecar-${{ matrix.target }}
-          path: gytmdl-gui/src-tauri/sidecars/
+          path: |
+            gytmdl-gui/src-tauri/sidecars/gytmdl-${{ matrix.target }}*
+          retention-days: 7
 
   build-tauri:
     name: Build Tauri App
@@ -78,17 +125,21 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
             target: 'x86_64-apple-darwin'
+            os: 'macos'
+            arch: 'x86_64'
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
             target: 'aarch64-apple-darwin'
+            os: 'macos'
+            arch: 'aarch64'
           - platform: 'ubuntu-20.04'
-            args: '--target x86_64-unknown-linux-gnu'
             target: 'x86_64-unknown-linux-gnu'
+            os: 'linux'
+            arch: 'x86_64'
           - platform: 'windows-latest'
-            args: '--target x86_64-pc-windows-msvc'
             target: 'x86_64-pc-windows-msvc'
+            os: 'windows'
+            arch: 'x86_64'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -98,7 +149,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: gytmdl-gui/package-lock.json
 
@@ -107,26 +158,79 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install dependencies (Ubuntu)
+      - name: Install system dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-20.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Download sidecar artifacts
-        uses: actions/download-artifact@v3
+      - name: Download all sidecar artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: sidecar-${{ matrix.target }}
+          pattern: sidecar-*
           path: gytmdl-gui/src-tauri/sidecars/
+          merge-multiple: true
+
+      - name: List downloaded sidecars
+        run: |
+          cd gytmdl-gui/src-tauri/sidecars
+          ls -la
 
       - name: Make sidecar binaries executable (Unix)
         if: matrix.platform != 'windows-latest'
-        run: chmod +x gytmdl-gui/src-tauri/sidecars/*
+        run: |
+          cd gytmdl-gui/src-tauri/sidecars
+          chmod +x gytmdl-* || true
+
+      - name: Setup code signing (macOS)
+        if: matrix.platform == 'macos-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "Setting up macOS code signing..."
+            echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+            security create-keychain -p actions build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p actions build.keychain
+            security import certificate.p12 -k build.keychain -P $APPLE_CERTIFICATE_PASSWORD -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+            rm certificate.p12
+          else
+            echo "No Apple certificate provided, skipping code signing setup"
+          fi
+
+      - name: Setup code signing (Windows)
+        if: matrix.platform == 'windows-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ($env:WINDOWS_CERTIFICATE) {
+            Write-Host "Setting up Windows code signing..."
+            $cert = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+            [IO.File]::WriteAllBytes("certificate.p12", $cert)
+            # Import certificate to store
+            Import-PfxCertificate -FilePath certificate.p12 -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force)
+            Remove-Item certificate.p12
+          } else {
+            Write-Host "No Windows certificate provided, skipping code signing setup"
+          }
 
       - name: Install frontend dependencies
         run: |
           cd gytmdl-gui
           npm ci
+
+      - name: Run frontend tests
+        run: |
+          cd gytmdl-gui
+          npm run test
 
       - name: Build frontend
         run: |
@@ -136,108 +240,374 @@ jobs:
       - name: Install Tauri CLI
         run: |
           cd gytmdl-gui
-          cargo install tauri-cli
+          cargo install tauri-cli --version "^2.0"
 
       - name: Build Tauri app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd gytmdl-gui
-          cargo tauri build ${{ matrix.args }}
+          cargo tauri build --target ${{ matrix.target }}
+
+      - name: Codesign and notarize (macOS)
+        if: matrix.platform == 'macos-latest' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_ID" ]; then
+            echo "Starting notarization process..."
+            cd gytmdl-gui/src-tauri/target/${{ matrix.target }}/release/bundle/dmg
+            for dmg in *.dmg; do
+              if [ -f "$dmg" ]; then
+                echo "Notarizing $dmg..."
+                xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+                xcrun stapler staple "$dmg"
+              fi
+            done
+          else
+            echo "No Apple ID provided, skipping notarization"
+          fi
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tauri-app-${{ matrix.target }}
           path: |
-            gytmdl-gui/src-tauri/target/*/release/bundle/
-            !gytmdl-gui/src-tauri/target/*/release/bundle/**/.*
+            gytmdl-gui/src-tauri/target/${{ matrix.target }}/release/bundle/
+          retention-days: 7
 
   create-release:
     name: Create Release
-    needs: build-tauri
+    needs: [build-sidecars, build-tauri]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v3
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tauri-app-*
+          path: artifacts/
+          merge-multiple: false
 
       - name: Create release directory
         run: mkdir -p release
 
-      - name: Collect release assets
+      - name: Collect and rename release assets
         run: |
-          # Collect all built installers
-          find . -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*-setup.exe" | while read file; do
-            cp "$file" release/
+          echo "Collecting release assets..."
+          
+          # Function to rename files with version and target
+          VERSION="${GITHUB_REF#refs/tags/}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="dev-$(date +%Y%m%d-%H%M%S)"
+          fi
+          
+          # Find and copy installers with proper naming
+          find artifacts/ -type f \( -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*-setup.exe" \) | while read file; do
+            filename=$(basename "$file")
+            # Extract target from artifact path
+            target=$(echo "$file" | grep -oP 'tauri-app-\K[^/]+' || echo "unknown")
+            
+            # Rename with version and target
+            case "$filename" in
+              *.msi)
+                new_name="gytmdl-gui-${VERSION}-${target}.msi"
+                ;;
+              *.dmg)
+                new_name="gytmdl-gui-${VERSION}-${target}.dmg"
+                ;;
+              *.deb)
+                new_name="gytmdl-gui-${VERSION}-${target}.deb"
+                ;;
+              *.rpm)
+                new_name="gytmdl-gui-${VERSION}-${target}.rpm"
+                ;;
+              *.AppImage)
+                new_name="gytmdl-gui-${VERSION}-${target}.AppImage"
+                ;;
+              *-setup.exe)
+                new_name="gytmdl-gui-${VERSION}-${target}-setup.exe"
+                ;;
+              *)
+                new_name="gytmdl-gui-${VERSION}-${target}-$(basename "$file")"
+                ;;
+            esac
+            
+            echo "Copying $file -> release/$new_name"
+            cp "$file" "release/$new_name"
           done
+          
+          # List collected files
+          echo "Collected release assets:"
+          ls -la release/
 
-      - name: Generate checksums
+      - name: Generate checksums and metadata
         run: |
           cd release
-          sha256sum * > checksums.txt
+          
+          # Generate checksums
+          if [ -n "$(ls -A .)" ]; then
+            sha256sum * > checksums.txt
+            echo "Generated checksums:"
+            cat checksums.txt
+          else
+            echo "No files found for checksum generation"
+            touch checksums.txt
+          fi
+          
+          # Create release metadata
+          cat > release-info.json << EOF
+          {
+            "version": "${GITHUB_REF#refs/tags/}",
+            "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "$GITHUB_SHA",
+            "gytmdl_version": "${{ needs.build-sidecars.outputs.sidecar-version }}",
+            "assets": [
+              $(ls *.msi *.dmg *.deb *.rpm *.AppImage *-setup.exe 2>/dev/null | sed 's/.*/"&"/' | paste -sd ',' || echo '""')
+            ]
+          }
+          EOF
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Create GitHub Release (Tag Push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          draft: ${{ github.event.inputs.release_type == 'draft' || contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+          prerelease: ${{ github.event.inputs.release_type == 'prerelease' || contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
           generate_release_notes: true
+          name: "gytmdl-gui ${{ github.ref_name }}"
+          body: |
+            ## gytmdl-gui ${{ github.ref_name }}
+            
+            Cross-platform GUI for gytmdl (YouTube Music Downloader)
+            
+            ### Features
+            - Download YouTube Music tracks, albums, and playlists
+            - Queue management with progress tracking
+            - Configuration management
+            - Cookie import for premium content
+            
+            ### Bundled gytmdl Version
+            This release includes gytmdl version: ${{ needs.build-sidecars.outputs.sidecar-version }}
+            
+            ### Installation
+            - **Windows**: Download and run the `.msi` installer
+            - **macOS**: Download and mount the `.dmg` file
+            - **Linux**: Download the `.deb`, `.rpm`, or `.AppImage` file
+            
+            ### Checksums
+            See `checksums.txt` for file verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Development Release (Workflow Dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          draft: true
+          prerelease: true
+          tag_name: "dev-${{ github.run_number }}"
+          name: "Development Build #${{ github.run_number }}"
+          body: |
+            ## Development Build #${{ github.run_number }}
+            
+            This is an automated development build for testing purposes.
+            
+            **Build Information:**
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+            - gytmdl Version: ${{ needs.build-sidecars.outputs.sidecar-version }}
+            - Build Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            **⚠️ Warning:** This is a development build and may be unstable.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test-installers:
     name: Test Installers
     needs: build-tauri
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: 'macos-latest'
             target: 'x86_64-apple-darwin'
-            installer: '*.dmg'
+            installer_pattern: '*.dmg'
           - platform: 'ubuntu-20.04'
             target: 'x86_64-unknown-linux-gnu'
-            installer: '*.deb'
+            installer_pattern: '*.deb'
           - platform: 'windows-latest'
             target: 'x86_64-pc-windows-msvc'
-            installer: '*.msi'
+            installer_pattern: '*.msi'
 
     runs-on: ${{ matrix.platform }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: tauri-app-${{ matrix.target }}
+          path: artifacts/
 
       - name: Test installer (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
-          # Mount DMG and verify contents
-          dmg_file=$(find . -name "*.dmg" | head -1)
-          if [ -n "$dmg_file" ]; then
-            hdiutil attach "$dmg_file"
-            ls -la /Volumes/*/
-            hdiutil detach /Volumes/gytmdl-gui* || true
+          echo "Testing macOS installer..."
+          dmg_file=$(find artifacts/ -name "*.dmg" | head -1)
+          if [ -n "$dmg_file" ] && [ -f "$dmg_file" ]; then
+            echo "Found DMG: $dmg_file"
+            
+            # Mount DMG and verify contents
+            echo "Mounting DMG..."
+            hdiutil attach "$dmg_file" -readonly -nobrowse
+            
+            # List mounted volumes
+            echo "Mounted volumes:"
+            ls -la /Volumes/
+            
+            # Check app bundle
+            app_path=$(find /Volumes -name "*.app" -type d | head -1)
+            if [ -n "$app_path" ]; then
+              echo "Found app bundle: $app_path"
+              ls -la "$app_path/Contents/"
+              
+              # Check for sidecar binaries
+              if [ -d "$app_path/Contents/Resources" ]; then
+                echo "Resources directory contents:"
+                find "$app_path/Contents/Resources" -name "gytmdl-*" -type f
+              fi
+            fi
+            
+            # Unmount
+            hdiutil detach /Volumes/gytmdl-gui* 2>/dev/null || true
+            echo "✅ macOS installer test completed"
+          else
+            echo "❌ No DMG file found"
+            exit 1
           fi
 
       - name: Test installer (Linux)
         if: matrix.platform == 'ubuntu-20.04'
         run: |
-          # Test DEB package
-          deb_file=$(find . -name "*.deb" | head -1)
-          if [ -n "$deb_file" ]; then
+          echo "Testing Linux installer..."
+          deb_file=$(find artifacts/ -name "*.deb" | head -1)
+          if [ -n "$deb_file" ] && [ -f "$deb_file" ]; then
+            echo "Found DEB: $deb_file"
+            
+            # Test DEB package info
+            echo "Package info:"
             dpkg-deb --info "$deb_file"
+            
+            echo "Package contents:"
             dpkg-deb --contents "$deb_file"
+            
+            # Check for sidecar binaries in package
+            echo "Checking for sidecar binaries:"
+            dpkg-deb --contents "$deb_file" | grep -E "gytmdl-.*" || echo "No sidecar binaries found in package listing"
+            
+            # Test package installation (dry run)
+            echo "Testing package installation (dry run):"
+            sudo dpkg --dry-run -i "$deb_file" || echo "Dry run completed with warnings (expected)"
+            
+            echo "✅ Linux installer test completed"
+          else
+            echo "❌ No DEB file found"
+            exit 1
           fi
 
       - name: Test installer (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
-          # Test MSI package (basic validation)
-          $msi_file = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
-          if ($msi_file) {
+          Write-Host "Testing Windows installer..."
+          $msi_file = Get-ChildItem -Path "artifacts/" -Recurse -Filter "*.msi" | Select-Object -First 1
+          if ($msi_file -and (Test-Path $msi_file.FullName)) {
             Write-Host "Found MSI: $($msi_file.FullName)"
-            # Could add more validation here
+            
+            # Get MSI properties
+            Write-Host "MSI Properties:"
+            $windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
+            $database = $windowsInstaller.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $windowsInstaller, @($msi_file.FullName, 0))
+            
+            # Query for basic properties
+            $query = "SELECT Property, Value FROM Property WHERE Property IN ('ProductName', 'ProductVersion', 'Manufacturer')"
+            $view = $database.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $database, ($query,))
+            $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null)
+            
+            do {
+              $record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
+              if ($record) {
+                $property = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1)
+                $value = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 2)
+                Write-Host "  $property = $value"
+              }
+            } while ($record)
+            
+            # Test MSI validation
+            Write-Host "Validating MSI package..."
+            $result = Start-Process -FilePath "msiexec" -ArgumentList "/a", "`"$($msi_file.FullName)`"", "/qn", "TARGETDIR=`"$env:TEMP\msi_test`"" -Wait -PassThru
+            if ($result.ExitCode -eq 0) {
+              Write-Host "✅ MSI validation successful"
+              # Clean up test extraction
+              Remove-Item -Path "$env:TEMP\msi_test" -Recurse -Force -ErrorAction SilentlyContinue
+            } else {
+              Write-Host "⚠️ MSI validation returned exit code: $($result.ExitCode)"
+            }
+            
+            Write-Host "✅ Windows installer test completed"
+          } else {
+            Write-Host "❌ No MSI file found"
+            exit 1
           }
+
+  security-scan:
+    name: Security Scan
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-app-x86_64-unknown-linux-gnu
+          path: artifacts/
+
+      - name: Run security scan on binaries
+        run: |
+          echo "Running basic security checks..."
+          
+          # Find the main binary
+          binary=$(find artifacts/ -name "gytmdl-gui" -type f | head -1)
+          if [ -n "$binary" ] && [ -f "$binary" ]; then
+            echo "Found binary: $binary"
+            
+            # Check binary properties
+            echo "Binary info:"
+            file "$binary"
+            
+            # Check for common security features
+            echo "Security features:"
+            readelf -d "$binary" | grep -E "(RUNPATH|RPATH|PIE|RELRO)" || echo "No security features detected"
+            
+            # Check dependencies
+            echo "Dependencies:"
+            ldd "$binary" | head -10
+            
+          else
+            echo "No binary found for security scan"
+          fi

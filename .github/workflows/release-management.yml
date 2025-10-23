@@ -1,0 +1,289 @@
+name: Release Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      prerelease_type:
+        description: 'Prerelease type (if prerelease selected)'
+        required: false
+        type: choice
+        options:
+          - alpha
+          - beta
+          - rc
+        default: 'beta'
+      custom_version:
+        description: 'Custom version (overrides release_type)'
+        required: false
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      new-version: ${{ steps.version.outputs.new-version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install semver tool
+        run: npm install -g semver
+
+      - name: Calculate new version
+        id: version
+        run: |
+          # Get current version from package.json
+          current_version=$(cat gytmdl-gui/package.json | jq -r '.version')
+          echo "Current version: $current_version"
+          
+          # Calculate new version
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            new_version="${{ github.event.inputs.custom_version }}"
+            echo "Using custom version: $new_version"
+          else
+            case "${{ github.event.inputs.release_type }}" in
+              "patch")
+                new_version=$(semver -i patch $current_version)
+                ;;
+              "minor")
+                new_version=$(semver -i minor $current_version)
+                ;;
+              "major")
+                new_version=$(semver -i major $current_version)
+                ;;
+              "prerelease")
+                new_version=$(semver -i prerelease --preid ${{ github.event.inputs.prerelease_type }} $current_version)
+                ;;
+              *)
+                echo "Invalid release type"
+                exit 1
+                ;;
+            esac
+          fi
+          
+          echo "New version: $new_version"
+          echo "new-version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the last tag
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -n "$last_tag" ]; then
+            echo "Generating changelog since $last_tag"
+            changelog=$(git log --pretty=format:"- %s (%h)" $last_tag..HEAD)
+          else
+            echo "No previous tags found, generating changelog from beginning"
+            changelog=$(git log --pretty=format:"- %s (%h)" --max-count=20)
+          fi
+          
+          # Save changelog to file for multiline output
+          cat > changelog.txt << EOF
+          ## Changes
+          
+          $changelog
+          
+          ## Full Changelog
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/$last_tag...v${{ steps.version.outputs.new-version }}
+          EOF
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat changelog.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update version in files
+        run: |
+          new_version="${{ steps.version.outputs.new-version }}"
+          
+          # Update package.json
+          cd gytmdl-gui
+          npm version $new_version --no-git-tag-version
+          
+          # Update Cargo.toml
+          cd src-tauri
+          sed -i "s/^version = \".*\"/version = \"$new_version\"/" Cargo.toml
+          
+          # Update tauri.conf.json
+          jq ".version = \"$new_version\"" tauri.conf.json > tauri.conf.json.tmp
+          mv tauri.conf.json.tmp tauri.conf.json
+
+      - name: Update Cargo.lock
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo check
+
+      - name: Commit version changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new-version }}"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ steps.version.outputs.new-version }}" -m "Release v${{ steps.version.outputs.new-version }}"
+          git push origin main
+          git push origin "v${{ steps.version.outputs.new-version }}"
+
+  validate-release:
+    name: Validate Release
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: "v${{ needs.prepare-release.outputs.new-version }}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: gytmdl-gui/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate version consistency
+        run: |
+          # Check that all version files are consistent
+          package_version=$(cat gytmdl-gui/package.json | jq -r '.version')
+          cargo_version=$(grep '^version = ' gytmdl-gui/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          tauri_version=$(cat gytmdl-gui/src-tauri/tauri.conf.json | jq -r '.version')
+          
+          echo "Package.json version: $package_version"
+          echo "Cargo.toml version: $cargo_version"
+          echo "Tauri.conf.json version: $tauri_version"
+          
+          if [ "$package_version" != "$cargo_version" ] || [ "$package_version" != "$tauri_version" ]; then
+            echo "Version mismatch detected!"
+            exit 1
+          fi
+          
+          if [ "$package_version" != "${{ needs.prepare-release.outputs.new-version }}" ]; then
+            echo "Version doesn't match expected version!"
+            exit 1
+          fi
+          
+          echo "All versions are consistent: $package_version"
+
+      - name: Run tests
+        run: |
+          cd gytmdl-gui
+          npm ci
+          npm run test
+
+      - name: Build frontend
+        run: |
+          cd gytmdl-gui
+          npm run build
+
+      - name: Build Rust backend
+        run: |
+          cd gytmdl-gui/src-tauri
+          cargo build --release
+
+      - name: Validate build artifacts
+        run: |
+          # Check that build artifacts exist
+          if [ ! -d "gytmdl-gui/dist" ]; then
+            echo "Frontend build artifacts not found!"
+            exit 1
+          fi
+          
+          if [ ! -f "gytmdl-gui/src-tauri/target/release/gytmdl-gui" ] && [ ! -f "gytmdl-gui/src-tauri/target/release/gytmdl-gui.exe" ]; then
+            echo "Backend build artifacts not found!"
+            exit 1
+          fi
+          
+          echo "Build validation successful"
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: [prepare-release, validate-release]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: "v${{ needs.prepare-release.outputs.new-version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ needs.prepare-release.outputs.new-version }}"
+          name: "gytmdl-gui v${{ needs.prepare-release.outputs.new-version }}"
+          body: |
+            # gytmdl-gui v${{ needs.prepare-release.outputs.new-version }}
+            
+            ${{ needs.prepare-release.outputs.changelog }}
+            
+            ## Installation
+            
+            The release binaries will be available shortly after the build completes.
+            
+            - **Windows**: Download the `.msi` installer
+            - **macOS**: Download the `.dmg` file
+            - **Linux**: Download the `.deb`, `.rpm`, or `.AppImage` file
+            
+            ## Notes
+            
+            This release was created automatically using the release management workflow.
+            The build artifacts will be uploaded by the build-and-release workflow.
+          draft: true
+          prerelease: ${{ contains(needs.prepare-release.outputs.new-version, 'alpha') || contains(needs.prepare-release.outputs.new-version, 'beta') || contains(needs.prepare-release.outputs.new-version, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-release:
+    name: Notify Release
+    needs: [prepare-release, validate-release, create-github-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: needs.create-github-release.result == 'success'
+        run: |
+          echo "✅ Release v${{ needs.prepare-release.outputs.new-version }} created successfully!"
+          echo "The build-and-release workflow will now build and upload the release artifacts."
+          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.prepare-release.outputs.new-version }}"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Release creation failed!"
+          echo "Please check the workflow logs and fix any issues before retrying."

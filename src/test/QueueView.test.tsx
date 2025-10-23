@@ -57,7 +57,7 @@ const mockJobs = [
 describe('QueueView Component', () => {
   beforeEach(() => {
     // Mock the get_queue response
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_queue') {
         return Promise.resolve({
           jobs: mockJobs,
@@ -138,7 +138,7 @@ describe('QueueView Component', () => {
     await user.click(addButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('add_to_queue', { url: testUrl });
+      expect(mockInvoke).toHaveBeenCalledWith('add_to_queue', { url: testUrl });
     });
   });
 
@@ -154,7 +154,7 @@ describe('QueueView Component', () => {
   });
 
   it('shows empty state when no jobs exist', async () => {
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_queue') {
         return Promise.resolve({
           jobs: [],
@@ -184,7 +184,7 @@ describe('QueueView Component', () => {
     const pauseButton = screen.getByRole('button', { name: /pause queue/i });
     await user.click(pauseButton);
     
-    expect((global as any).mockInvoke).toHaveBeenCalledWith('pause_queue');
+    expect(mockInvoke).toHaveBeenCalledWith('pause_queue');
   });
 
   it('handles clear completed jobs functionality', async () => {
@@ -200,7 +200,7 @@ describe('QueueView Component', () => {
     await user.click(clearButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('remove_job', { jobId: '3' });
+      expect(mockInvoke).toHaveBeenCalledWith('remove_job', { jobId: '3' });
     });
   });
 
@@ -239,7 +239,7 @@ describe('QueueView Component', () => {
     fireEvent(dropZone!, dropEvent);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('add_to_queue', { url: testUrl });
+      expect(mockInvoke).toHaveBeenCalledWith('add_to_queue', { url: testUrl });
     });
   });
 });

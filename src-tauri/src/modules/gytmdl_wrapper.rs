@@ -1,13 +1,12 @@
-use crate::modules::state::{AppConfig, DownloadJob, JobStatus, Progress, DownloadStage};
+use crate::modules::state::{AppConfig, DownloadJob};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+
 use std::fs;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 
 #[derive(Debug)]
 pub enum GytmdlError {
@@ -181,7 +180,7 @@ impl GytmdlWrapper {
             )))?;
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let mut buffer = [0; 8192];
+        let _buffer = [0; 8192];
         
         // For a proper SHA256, we'd need a crypto library, but for now we'll use a simple hash
         // In a real implementation, you'd want to use sha2 crate
@@ -308,7 +307,7 @@ impl GytmdlWrapper {
     }
 
     /// Build command arguments from AppConfig
-    pub fn build_command_args(&self, config: &AppConfig, url: &str, job_id: &str) -> Result<Vec<String>, GytmdlError> {
+    pub fn build_command_args(&self, config: &AppConfig, url: &str, _job_id: &str) -> Result<Vec<String>, GytmdlError> {
         let mut args = Vec::new();
 
         // Validate URL

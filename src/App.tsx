@@ -1,11 +1,13 @@
 import { useState } from "react";
 import "./App.css";
 import { QueueView, ConfigEditor, CookieManager, NotificationCenter, GlobalLoadingOverlay } from "./components";
+import DebugPanel from "./components/DebugPanel";
 
 type ActiveView = 'queue' | 'config' | 'cookies';
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>('queue');
+  const [debugPanelVisible, setDebugPanelVisible] = useState(false);
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -62,6 +64,12 @@ function App() {
       {/* Global components */}
       <NotificationCenter />
       <GlobalLoadingOverlay />
+      
+      {/* Debug Panel - only in development or when enabled */}
+      <DebugPanel 
+        isVisible={debugPanelVisible}
+        onToggle={() => setDebugPanelVisible(!debugPanelVisible)}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach } from 'vitest';
 import ConfigEditor from '../components/ConfigEditor';
@@ -27,7 +27,7 @@ const mockConfig = {
 
 describe('ConfigEditor Component', () => {
   beforeEach(() => {
-    (global as any).mockInvoke.mockImplementation((command: string) => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === 'get_config') {
         return Promise.resolve(mockConfig);
       }
@@ -177,7 +177,7 @@ describe('ConfigEditor Component', () => {
     await user.click(saveButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('update_config', {
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
         config: expect.objectContaining({
           output_path: '/new/valid/path',
         }),

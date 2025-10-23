@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach } from 'vitest';
 import QueueItem from '../components/QueueItem';
@@ -26,12 +26,14 @@ const mockJob = {
   },
 };
 
+import { vi } from 'vitest';
+
 const mockOnJobUpdate = vi.fn();
 
 describe('QueueItem Component', () => {
   beforeEach(() => {
     mockOnJobUpdate.mockReset();
-    (global as any).mockInvoke.mockReset();
+    mockInvoke.mockReset();
   });
 
   it('renders job metadata correctly', () => {
@@ -153,7 +155,7 @@ describe('QueueItem Component', () => {
       error: 'Download failed',
     };
 
-    (global as any).mockInvoke.mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue(undefined);
 
     render(<QueueItem job={failedJob} onJobUpdate={mockOnJobUpdate} />);
     
@@ -161,14 +163,14 @@ describe('QueueItem Component', () => {
     await user.click(retryButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('retry_job', { jobId: 'test-job-1' });
+      expect(mockInvoke).toHaveBeenCalledWith('retry_job', { jobId: 'test-job-1' });
       expect(mockOnJobUpdate).toHaveBeenCalled();
     });
   });
 
   it('handles cancel job action', async () => {
     const user = userEvent.setup();
-    (global as any).mockInvoke.mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue(undefined);
 
     render(<QueueItem job={mockJob} onJobUpdate={mockOnJobUpdate} />);
     
@@ -176,7 +178,7 @@ describe('QueueItem Component', () => {
     await user.click(cancelButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('cancel_job', { jobId: 'test-job-1' });
+      expect(mockInvoke).toHaveBeenCalledWith('cancel_job', { jobId: 'test-job-1' });
       expect(mockOnJobUpdate).toHaveBeenCalled();
     });
   });
@@ -188,7 +190,7 @@ describe('QueueItem Component', () => {
       status: JobStatus.Completed,
     };
 
-    (global as any).mockInvoke.mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue(undefined);
 
     render(<QueueItem job={completedJob} onJobUpdate={mockOnJobUpdate} />);
     
@@ -196,7 +198,7 @@ describe('QueueItem Component', () => {
     await user.click(removeButton);
     
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('remove_job', { jobId: 'test-job-1' });
+      expect(mockInvoke).toHaveBeenCalledWith('remove_job', { jobId: 'test-job-1' });
       expect(mockOnJobUpdate).toHaveBeenCalled();
     });
   });
@@ -286,7 +288,7 @@ describe('QueueItem Component', () => {
 
   it('handles action button errors gracefully', async () => {
     const user = userEvent.setup();
-    (global as any).mockInvoke.mockRejectedValue(new Error('Network error'));
+    mockInvoke.mockRejectedValue(new Error('Network error'));
 
     render(<QueueItem job={mockJob} onJobUpdate={mockOnJobUpdate} />);
     
@@ -295,7 +297,7 @@ describe('QueueItem Component', () => {
     
     // Should handle error without crashing
     await waitFor(() => {
-      expect((global as any).mockInvoke).toHaveBeenCalledWith('cancel_job', { jobId: 'test-job-1' });
+      expect(mockInvoke).toHaveBeenCalledWith('cancel_job', { jobId: 'test-job-1' });
     });
   });
 });

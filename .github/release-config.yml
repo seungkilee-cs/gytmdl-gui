@@ -1,0 +1,162 @@
+# Release Configuration for gytmdl-gui
+# This file contains configuration for the automated release pipeline
+
+# Release settings
+release:
+  # Supported platforms for building
+  platforms:
+    - name: "Windows x64"
+      target: "x86_64-pc-windows-msvc"
+      runner: "windows-latest"
+      installer_formats: ["msi", "nsis"]
+    - name: "Windows x86"
+      target: "i686-pc-windows-msvc"
+      runner: "windows-latest"
+      installer_formats: ["msi", "nsis"]
+    - name: "macOS Intel"
+      target: "x86_64-apple-darwin"
+      runner: "macos-latest"
+      installer_formats: ["dmg", "app"]
+    - name: "macOS Apple Silicon"
+      target: "aarch64-apple-darwin"
+      runner: "macos-latest"
+      installer_formats: ["dmg", "app"]
+    - name: "Linux x64"
+      target: "x86_64-unknown-linux-gnu"
+      runner: "ubuntu-20.04"
+      installer_formats: ["deb", "rpm", "appimage"]
+    - name: "Linux ARM64"
+      target: "aarch64-unknown-linux-gnu"
+      runner: "ubuntu-20.04"
+      installer_formats: ["deb", "rpm", "appimage"]
+
+  # Code signing configuration
+  code_signing:
+    windows:
+      enabled: true
+      certificate_secret: "WINDOWS_CERTIFICATE"
+      password_secret: "WINDOWS_CERTIFICATE_PASSWORD"
+    macos:
+      enabled: true
+      certificate_secret: "APPLE_CERTIFICATE"
+      password_secret: "APPLE_CERTIFICATE_PASSWORD"
+      signing_identity_secret: "APPLE_SIGNING_IDENTITY"
+      apple_id_secret: "APPLE_ID"
+      apple_password_secret: "APPLE_PASSWORD"
+      team_id_secret: "APPLE_TEAM_ID"
+
+  # Notarization settings (macOS)
+  notarization:
+    enabled: true
+    timeout_minutes: 30
+
+  # Release artifact settings
+  artifacts:
+    retention_days: 90
+    include_checksums: true
+    include_metadata: true
+
+# Build settings
+build:
+  # Node.js version for frontend builds
+  node_version: "20"
+  
+  # Rust toolchain
+  rust_toolchain: "stable"
+  
+  # Python version for sidecar builds
+  python_version: "3.11"
+  
+  # Concurrent build limit
+  max_parallel_builds: 4
+  
+  # Build timeout (minutes)
+  timeout_minutes: 60
+
+# Sidecar binary settings
+sidecar:
+  # gytmdl repository settings
+  repository: "glomatico/gytmdl"
+  branch: "main"
+  
+  # Build settings
+  pyinstaller_options:
+    - "--onefile"
+    - "--console"
+    - "--name=gytmdl"
+    - "--add-data=gytmdl:gytmdl"
+  
+  # Validation settings
+  validate_binaries: true
+  test_execution: true
+
+# Testing settings
+testing:
+  # Run tests before release
+  run_tests: true
+  
+  # Test installer functionality
+  test_installers: true
+  
+  # Security scanning
+  security_scan: true
+  
+  # License compliance check
+  license_check: true
+
+# Notification settings
+notifications:
+  # Notify on release creation
+  on_release: true
+  
+  # Notify on build failure
+  on_failure: true
+  
+  # Notify on security issues
+  on_security_issues: true
+
+# Dependency management
+dependencies:
+  # Automatic dependency updates
+  auto_update: true
+  
+  # Update schedule (cron format)
+  update_schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM UTC
+  
+  # Security monitoring
+  security_monitoring: true
+  
+  # Security scan schedule (cron format)
+  security_schedule: "0 3 * * *"  # Daily at 3 AM UTC
+
+# Release validation
+validation:
+  # Version consistency check
+  check_version_consistency: true
+  
+  # Build artifact validation
+  validate_artifacts: true
+  
+  # Minimum file size checks (bytes)
+  min_installer_size:
+    msi: 10485760    # 10 MB
+    dmg: 10485760    # 10 MB
+    deb: 10485760    # 10 MB
+    rpm: 10485760    # 10 MB
+    appimage: 10485760  # 10 MB
+
+# GitHub settings
+github:
+  # Release settings
+  draft_releases: true
+  generate_release_notes: true
+  
+  # Asset upload settings
+  upload_timeout_minutes: 30
+  
+  # PR settings for dependency updates
+  dependency_pr:
+    title_template: "chore: automated dependency updates"
+    branch_name: "automated-dependency-updates"
+    labels: ["dependencies", "automated"]
+    auto_merge: false

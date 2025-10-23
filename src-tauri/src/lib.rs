@@ -5,6 +5,7 @@ use modules::config_manager::ConfigManager;
 use modules::queue_manager::QueueManager;
 use modules::cookie_manager::CookieManager;
 use modules::sidecar_manager::{get_sidecar_status, validate_sidecar_binaries, select_best_sidecar, check_sidecar_compatibility};
+use modules::debug_logger::{DEBUG_LOGGER, LogEntry};
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
@@ -541,7 +542,12 @@ pub fn run() {
             get_sidecar_status,
             validate_sidecar_binaries,
             select_best_sidecar,
-            check_sidecar_compatibility
+            check_sidecar_compatibility,
+            // Debug Commands
+            get_debug_logs,
+            clear_debug_logs,
+            test_sidecar_binary,
+            test_download_dry_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

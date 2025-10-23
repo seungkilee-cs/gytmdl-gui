@@ -1,3 +1,4 @@
+import { vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
 // Mock Tauri API
@@ -8,7 +9,11 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 // Make mockInvoke available globally for tests
-(global as any).mockInvoke = mockInvoke;
+declare global {
+  var mockInvoke: ReturnType<typeof vi.fn>;
+}
+
+globalThis.mockInvoke = mockInvoke;
 
 // Reset mocks before each test
 beforeEach(() => {
