@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -34,6 +34,20 @@ impl DebugLogger {
     }
 
     pub fn log(&self, level: LogLevel, component: &str, message: &str, data: Option<serde_json::Value>) {
+        // Print to console for development first
+        let level_str = match level {
+            LogLevel::DEBUG => "DEBUG",
+            LogLevel::INFO => "INFO",
+            LogLevel::WARN => "WARN",
+            LogLevel::ERROR => "ERROR",
+        };
+        
+        if let Some(ref data) = data {
+            println!("[{}] {}: {} - {}", level_str, component, message, data);
+        } else {
+            println!("[{}] {}: {}", level_str, component, message);
+        }
+
         let entry = LogEntry {
             timestamp: Utc::now().to_rfc3339(),
             level,
@@ -49,20 +63,6 @@ impl DebugLogger {
             while logs.len() > self.max_logs {
                 logs.pop_front();
             }
-        }
-
-        // Also print to console for development
-        let level_str = match entry.level {
-            LogLevel::DEBUG => "DEBUG",
-            LogLevel::INFO => "INFO",
-            LogLevel::WARN => "WARN",
-            LogLevel::ERROR => "ERROR",
-        };
-        
-        if let Some(data) = &entry.data {
-            println!("[{}] {}: {} - {}", level_str, entry.component, entry.message, data);
-        } else {
-            println!("[{}] {}: {}", level_str, entry.component, entry.message);
         }
     }
 

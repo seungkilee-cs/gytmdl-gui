@@ -5,7 +5,7 @@ use modules::config_manager::ConfigManager;
 use modules::queue_manager::QueueManager;
 use modules::cookie_manager::CookieManager;
 use modules::sidecar_manager::{get_sidecar_status, validate_sidecar_binaries, select_best_sidecar, check_sidecar_compatibility};
-use modules::debug_logger::{DEBUG_LOGGER, LogEntry};
+use modules::debug_logger::LogEntry;
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
@@ -488,6 +488,76 @@ async fn clear_cookies(context: tauri::State<'_, Arc<AppContext>>) -> Result<(),
     
     cookie_manager.clear_cookies().await
         .map_err(|e| e.to_string())
+}
+
+// Debug Commands
+#[tauri::command]
+async fn get_debug_logs() -> Result<Vec<LogEntry>, String> {
+    lazy_static::lazy_static! {
+        static ref DEBUG_LOGGER: modules::debug_logger::DebugLogger = modules::debug_logger::DebugLogger::new(1000);
+    }
+    Ok(DEBUG_LOGGER.get_logs())
+}
+
+#[tauri::command]
+async fn clear_debug_logs() -> Result<(), String> {
+    lazy_static::lazy_static! {
+        static ref DEBUG_LOGGER: modules::debug_logger::DebugLogger = modules::debug_logger::DebugLogger::new(1000);
+    }
+    DEBUG_LOGGER.clear_logs();
+    Ok(())
+}
+
+#[tauri::command]
+async fn test_sidecar_binary(context: tauri::State<'_, Arc<AppContext>>) -> Result<String, String> {
+    lazy_static::lazy_static! {
+        static ref DEBUG_LOGGER: modules::debug_logger::DebugLogger = modules::debug_logger::DebugLogger::new(1000);
+    }
+    
+    DEBUG_LOGGER.info("DebugCommands", "Testing sidecar binary...", None);
+    
+    if let Some(queue_manager) = context.queue_manager.read().await.as_ref() {
+        match queue_manager.test_sidecar().await {
+            Ok(result) => {
+                DEBUG_LOGGER.info("DebugCommands", "Sidecar test successful", Some(serde_json::json!({"result": result})));
+                Ok(result)
+            }
+            Err(e) => {
+                DEBUG_LOGGER.error("DebugCommands", "Sidecar test failed", Some(serde_json::json!({"error": e.to_string()})));
+                Err(e.to_string())
+            }
+        }
+    } else {
+        let error = "Queue manager not initialized";
+        DEBUG_LOGGER.error("DebugCommands", error, None);
+        Err(error.to_string())
+    }
+}
+
+#[tauri::command]
+async fn test_download_dry_run(url: String, context: tauri::State<'_, Arc<AppContext>>) -> Result<String, String> {
+    lazy_static::lazy_static! {
+        static ref DEBUG_LOGGER: modules::debug_logger::DebugLogger = modules::debug_logger::DebugLogger::new(1000);
+    }
+    
+    DEBUG_LOGGER.info("DebugCommands", "Testing download dry run...", Some(serde_json::json!({"url": url})));
+    
+    if let Some(queue_manager) = context.queue_manager.read().await.as_ref() {
+        match queue_manager.test_download_dry_run(&url).await {
+            Ok(result) => {
+                DEBUG_LOGGER.info("DebugCommands", "Dry run test successful", Some(serde_json::json!({"result": result})));
+                Ok(result)
+            }
+            Err(e) => {
+                DEBUG_LOGGER.error("DebugCommands", "Dry run test failed", Some(serde_json::json!({"error": e.to_string()})));
+                Err(e.to_string())
+            }
+        }
+    } else {
+        let error = "Queue manager not initialized";
+        DEBUG_LOGGER.error("DebugCommands", error, None);
+        Err(error.to_string())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

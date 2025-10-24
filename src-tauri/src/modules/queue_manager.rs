@@ -1,4 +1,4 @@
-use crate::modules::state::{AppState, DownloadJob, JobStatus};
+use crate::modules::state::{AppState, DownloadJob, JobStatus, Progress};
 use crate::modules::gytmdl_wrapper::{GytmdlWrapper, GytmdlError};
 use crate::modules::progress_parser::ProgressParser;
 use std::sync::Arc;
@@ -271,24 +271,27 @@ impl QueueManager {
             if !stdout_done {
                 match process.read_stdout_line().await {
                     Ok(Some(line)) => {
+                        println!("DEBUG: gytmdl stdout: {}", line);
                         let sanitized_line = ProgressParser::sanitize_output(&line);
                         
                         // Check for completion
                         if ProgressParser::is_completion_line(&sanitized_line) {
-                            // Don't break immediately, let the process finish naturally
+                            println!("DEBUG: Completion line detected: {}", sanitized_line);
                         }
                         
                         // Parse progress and update state
                         if let Some(progress) = ProgressParser::parse_output(&sanitized_line) {
+                            println!("DEBUG: Progress parsed: {:?}", progress);
                             let mut state_guard = state.write().await;
                             state_guard.update_job_progress(&job_id, progress);
                         }
                     }
                     Ok(None) => {
-                        // EOF on stdout
+                        println!("DEBUG: EOF on stdout");
                         stdout_done = true;
                     }
                     Err(e) => {
+                        println!("DEBUG: Error reading stdout: {}", e);
                         return JobResult::Failed(job_id, format!("Error reading stdout: {}", e));
                     }
                 }
@@ -325,6 +328,7 @@ impl QueueManager {
 
             // If both streams are done, wait for process to finish
             if stdout_done && stderr_done {
+                println!("DEBUG: Both stdout and stderr streams finished");
                 break;
             }
 
@@ -644,6 +648,48 @@ impl QueueManager {
             cancelled: state_guard.count_jobs_by_status(&JobStatus::Cancelled),
             total: state_guard.jobs.len(),
             is_paused: *self.is_paused.read().await,
+        }
+    }
+
+    /// Test the sidecar binary
+    pub async fn test_sidecar(&self) -> Result<String, crate::modules::gytmdl_wrapper::GytmdlError> {
+        self.gytmdl_wrapper.test_binary().await
+    }
+
+    /// Test download with dry run (no actual download)
+    pub async fn test_download_dry_run(&self, url: &str) -> Result<String, crate::modules::gytmdl_wrapper::GytmdlError> {
+        // Create a temporary job for testing
+        let test_job = DownloadJob {
+            id: "test-dry-run".to_string(),
+            url: url.to_string(),
+            status: JobStatus::Queued,
+            progress: crate::modules::state::Progress {
+                stage: crate::modules::state::DownloadStage::Initializing,
+                percentage: None,
+                current_step: "Testing".to_string(),
+                total_steps: None,
+                current_step_index: None,
+            },
+            metadata: None,
+            error: None,
+            created_at: chrono::Utc::now(),
+            started_at: None,
+            completed_at: None,
+        };
+
+        // Get current config
+        let config = {
+            let state_guard = self.state.read().await;
+            state_guard.config.clone()
+        };
+
+        // Test if we can build the command args (dry run)
+        match self.gytmdl_wrapper.build_command_args(&config, url, &test_job.id) {
+            Ok(args) => {
+                let command_str = format!("gytmdl {:?}", args);
+                Ok(format!("Dry run successful. Command would be: {}", command_str))
+            }
+            Err(e) => Err(e)
         }
     }
 }
